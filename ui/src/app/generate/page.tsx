@@ -3,7 +3,7 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@headlessui/react';
-import { ChevronDown, ChevronLeft, ChevronRight, Loader2, OctagonX, Play, Plus, Square, Sparkles, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Loader2, OctagonX, Play, Plus, Square, Sparkles, Trash2, X, PanelsTopLeft } from 'lucide-react';
 import { openConfirm } from '@/components/ConfirmModal';
 import { TopBar, MainContent } from '@/components/layout';
 import { Checkbox, CreatableSelectInput, NumberInput, SelectInput, SliderInput, TextAreaInput, TextInput } from '@/components/formInputs';
@@ -19,6 +19,7 @@ import { isMac } from '@/helpers/basic';
 import { modelArchs, getGenerateDefaults, GenerateDefaults } from '@/app/jobs/new/options';
 import GenerateFooter from '@/components/generate/GenerateFooter';
 import LoraBrowserModal, { LoraPick } from '@/components/generate/LoraBrowserModal';
+import CompareFolderModal from '@/components/generate/CompareFolderModal';
 
 
 interface EngineStatus {
@@ -321,6 +322,8 @@ function GeneratePageInner() {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(persisted.sidebarOpen ?? true);
   const [cards, setCards] = useState<{ [key: string]: boolean }>(persisted.cards || {});
   const [loraModalOpen, setLoraModalOpen] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [sweepProgress, setSweepProgress] = useState('');
   const [resultMenu, setResultMenu] = useState<{ result: ResultItem; x: number; y: number } | null>(null);
   useEffect(() => {
     if (!resultMenu) return;
@@ -472,10 +475,13 @@ function GeneratePageInner() {
   // one consumer for both a fresh /generate response and a /stream/{id}
   // reattach: everything the stage needs comes from the frames themselves
   const consumeStream = async (res: Response, abort: AbortController) => {
+    const finishedResults: ResultItem[] = [];
     let preview: PreviewInfo | null = null;
     let startInfo: { arch: string; prompt: string } = { arch, prompt: sample.prompt || '' };
-    // Use engine-confirmed settings, including when reattaching a stream.
+    // Capture engine-confirmed settings, never the currently edited sidebar.
+    // Reattached streams replay the same start frame.
     let generation: ResultItem['generation'];
+    let completed = false;
     // only the first latent of a run pulls the stage to the preview; after
     // that the user may browse history and come back via the live tile
     let shownPreview = false;
@@ -489,7 +495,6 @@ function GeneratePageInner() {
             generation = header.model && header.sample
               ? JSON.parse(JSON.stringify({ model: header.model, sample: header.sample }))
               : undefined;
-
             startInfo = { arch: header.model?.arch || arch, prompt: header.sample?.prompt ?? '' };
             if (header.sample?.width && header.sample?.height) {
               previewSizeRef.current = { width: header.sample.width, height: header.sample.height };
@@ -537,21 +542,26 @@ function GeneratePageInner() {
               prompt: startInfo.prompt,
               arch: startInfo.arch,
             };
-            setResults(r => (r.some(x => x.path === item.path) ? r : [item, ...r]));
-            setSelected(item);
-            setShowPreview(false);
+            finishedResults.push(item);
             break;
           }
           case 'error':
-            setError(header.cancelled ? 'Cancelled' : header.message);
-            break;
+            throw new Error(header.cancelled ? 'Cancelled' : header.message);
           case 'end':
             setStatusLine(header.status === 'done' ? 'Done' : header.status);
+            completed = header.status === 'done';
             break;
         }
       },
       abort.signal,
     );
+    if (!abort.signal.aborted && !completed) throw new Error('Generation did not complete; remaining comparisons stopped.');
+    if (completed && finishedResults.length) {
+      // Failed/cancelled streams must not contribute attempts or survivors.
+      setResults(previous => [...finishedResults.filter(item => !previous.some(r => r.path === item.path)), ...previous]);
+      setSelected(finishedResults[finishedResults.length - 1]);
+      setShowPreview(false);
+    }
   };
 
   const beginRun = () => {
@@ -581,7 +591,7 @@ function GeneratePageInner() {
     }
   };
 
-  const generate = async () => {
+  const generate = async (sweep?: { files: LoraPick[]; baseline: boolean }) => {
     if (!ready || running) return;
     const abort = beginRun();
     setStatusLine('Submitting');
@@ -591,11 +601,25 @@ function GeneratePageInner() {
       sample: { ...sample, seed: sample.seed === '' ? -1 : sample.seed },
       stream: { latents: 'raw', every_n_steps: 1, max_frames: 0 },
     };
+    const snapshot = JSON.parse(JSON.stringify(body));
+    if (sweep && (snapshot.sample.seed == null || Number(snapshot.sample.seed) < 0)) {
+      snapshot.sample.seed = crypto.getRandomValues(new Uint32Array(1))[0];
+    }
+    const batches = sweep ? [
+      ...(sweep.baseline ? [{ label: 'Base model', loras: [] }] : []),
+      ...sweep.files.flatMap(f => [0.6, 0.8, 1.0].map(strength => ({ label: `${f.name} @ ${strength}`, loras: [{ ...f, strength }] }))),
+    ] : [{ label: '', loras: snapshot.model.loras }];
     try {
+      for (let index = 0; index < batches.length; index++) {
+      if (abort.signal.aborted) break;
+      const batch = batches[index];
+      setSweepProgress(sweep ? `${index + 1}/${batches.length} · ${batch.label}` : '');
+      requestIdRef.current = null;
+      setProgress(null);
       const res = await fetch(proxy('generate'), {
         method: 'POST',
         headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...snapshot, model: { ...snapshot.model, loras: batch.loras } }),
         signal: abort.signal,
       });
       if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
@@ -609,9 +633,11 @@ function GeneratePageInner() {
         }
       }
       await consumeStream(res, abort);
+      }
     } catch (e: any) {
       if (e?.name !== 'AbortError') setError(e?.message || String(e));
     } finally {
+      setSweepProgress('');
       endRun();
     }
   };
@@ -685,6 +711,8 @@ function GeneratePageInner() {
 
   const cancel = async () => {
     const id = requestIdRef.current;
+    // Stop the client queue immediately, before waiting for server cancellation.
+    abortRef.current?.abort();
     if (id) {
       try {
         await apiClient.post(proxy(`cancel/${id}`));
@@ -1112,13 +1140,15 @@ function GeneratePageInner() {
               {/* always-visible action bar */}
               <div className="shrink-0 p-2 border-t border-gray-800 bg-gray-900 flex gap-2">
                 <Button
-                  onClick={generate}
+                  onClick={() => generate()}
                   disabled={!ready || running || !model.name_or_path}
                   className="flex-1 px-3 py-1.5 rounded-md bg-blue-700 hover:bg-blue-600 disabled:opacity-40 text-white text-sm flex items-center justify-center gap-2"
                   title="Ctrl/Cmd + Enter"
                 >
                   {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Generate
                 </Button>
+                <Button onClick={() => setCompareOpen(true)} disabled={!ready || running || !model.name_or_path}
+                  title="Compare folder" aria-label="Compare folder" className="px-3 py-1.5 rounded-md bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white text-sm"><PanelsTopLeft className="w-5 h-5" /></Button>
                 {running && (
                   <Button onClick={cancel} className="px-3 py-2 rounded-md bg-gray-700 hover:bg-gray-600 text-white">
                     Cancel
@@ -1143,6 +1173,8 @@ function GeneratePageInner() {
           </div>
         </div>
       )}
+      {sweepProgress && <div role="status" className="fixed bottom-10 left-4 z-50 max-w-[70vw] truncate rounded bg-gray-950 px-3 py-2 text-sm text-blue-300">Comparison {sweepProgress}</div>}
+      <CompareFolderModal isOpen={compareOpen} onClose={() => setCompareOpen(false)} onRun={(files, baseline) => generate({ files, baseline })} />
       <LoraBrowserModal isOpen={loraModalOpen} onClose={() => setLoraModalOpen(false)} onPick={addLora} />
     </>
   );
