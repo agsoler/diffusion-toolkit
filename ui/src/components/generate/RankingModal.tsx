@@ -55,11 +55,12 @@ export default function RankingModal({ isOpen, onClose, history, running = false
       setSeparateEncoders(settings.RANKINGS_SEPARATE_ENCODERS !== 'false');
       setRecords(data.results.filter((r: EvidenceRecord) => r.round?.kind === 'compare'));
       setLoaded(true);
-      const latest = historyRef.current.find(r => r.round?.folder || r.generation?.model?.loras?.length === 1);
+      const availableFolders = [...new Set<string>(data.results.flatMap((r: EvidenceRecord) => (r.generation?.model?.loras || []).map(l => parentFolder(l.path))))];
+      const latest = historyRef.current.find(r => r.round?.kind === 'compare' && r.round.folder && availableFolders.includes(normalPath(r.round.folder)));
       const first = latest || data.results.find((r: EvidenceRecord) => r.generation?.model?.loras?.length === 1);
       setFolder(
         old =>
-          old ||
+          (availableFolders.includes(old) ? old : '') ||
           (first?.round?.folder
             ? normalPath(first.round.folder)
             : first?.generation?.model?.loras?.[0]
