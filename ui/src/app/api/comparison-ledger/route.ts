@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { recordResults, readResults } from '@/server/comparisonLedger';
+import { recordResults, readResults, forgottenRoundIds } from '@/server/comparisonLedger';
 export const dynamic = 'force-dynamic';
 export async function GET() {
-  try { return NextResponse.json({ results: await readResults() }); }
+  try { return NextResponse.json({ results: await readResults(), forgottenRoundIds: await forgottenRoundIds() }); }
   catch { return NextResponse.json({ error: 'Unable to read comparison ledger' }, { status: 500 }); }
 }
 export async function POST(request: Request) {

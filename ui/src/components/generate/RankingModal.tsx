@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
-import { ArrowLeft, ArrowRight, ArrowUpRight, Grid2X2, LineChart, Images, RefreshCw, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUpRight, Grid2X2, LineChart, Images, RefreshCw, X, List } from 'lucide-react';
+import RoundsView from './RoundsView';
 import { apiClient } from '@/utils/api';
 import { encodeFilePathForUrl } from '@/utils/basic';
 import { parentFolder, rankResults, Standing } from '@/utils/comparisonRanking';
@@ -17,14 +18,14 @@ import {
 import './RankingStudio.css';
 import { encoderIdentity } from '@/utils/encoderIdentity';
 
-const views = ['Heatmap', 'Strength curves', 'Evidence board'];
+const views = ['Heatmap', 'Strength curves', 'Evidence board', 'Rounds'];
 const colours = ['#c4ed84', '#ac8bbc', '#7eacbf', '#cbaa70', '#e8a38f', '#748899'];
 const percentage = (r: Standing) => Math.round((100 * r.kept) / r.total);
 const label = (r: Standing) =>
   `${shortCheckpoint(r.path)}${r.strength === undefined ? ' · all strengths' : ` · ${r.strength}`}`;
-type Props = { isOpen: boolean; onClose: () => void; history: EvidenceRecord[] };
+type Props = { isOpen: boolean; onClose: () => void; history: EvidenceRecord[]; running?: boolean; onForgetRounds: (ids: string[]) => void };
 
-export default function RankingModal({ isOpen, onClose, history }: Props) {
+export default function RankingModal({ isOpen, onClose, history, running = false, onForgetRounds }: Props) {
   const [records, setRecords] = useState<EvidenceRecord[]>([]);
   const [separateEncoders, setSeparateEncoders] = useState(true);
   const [encoder, setEncoder] = useState('');
@@ -50,6 +51,7 @@ export default function RankingModal({ isOpen, onClose, history }: Props) {
       const { data } = await apiClient.get('/api/comparison-ledger');
       const { data: settings } = await apiClient.get('/api/settings');
       if (request.current !== id) return;
+      onForgetRounds(data.forgottenRoundIds || []);
       setSeparateEncoders(settings.RANKINGS_SEPARATE_ENCODERS !== 'false');
       setRecords(data.results.filter((r: EvidenceRecord) => r.round?.kind === 'compare'));
       setLoaded(true);
@@ -104,7 +106,21 @@ export default function RankingModal({ isOpen, onClose, history }: Props) {
   const shownEvidence = evidenceFor(data.scoped, selected, prompt);
   const rounds = new Set(data.scoped.flatMap(r => (r.round?.id ? [r.round.id] : []))).size;
   const kept = data.scoped.filter(r => !r.deleted).length;
-  const cycle = (direction: number) => setView(v => (v + direction + 3) % 3);
+  const cycle = (direction: number) => setView(v => (v + direction + views.length) % views.length);
+  const deleteRounds = async (ids: string[]) => {
+    setLoading(true);
+    setError('');
+    try {
+      // Explicit IDs freeze the confirmed scope; chunking keeps the number of rounds unbounded.
+      for (let i = 0; i < ids.length; i += 500) {
+        const { data: result } = await apiClient.post('/api/comparison-ledger/rounds', { roundIds: ids.slice(i, i + 500), folder, encoder: separateEncoders ? activeEncoder : null });
+        onForgetRounds(result.deletedRoundIds);
+        setRecords(old => old.filter(r => !result.deletedRoundIds.includes(r.round?.id)));
+        if (result.failedRoundIds.length) throw Error('Some rounds could not be completely deleted. Their history is retained; refresh and retry.');
+      }
+    } catch (e: any) { setError(e?.response?.data?.error || e.message || 'Unable to delete rounds. Refresh and retry.'); }
+    finally { setLoading(false); }
+  };
 
   function Leaderboard() {
     return (
@@ -220,7 +236,7 @@ export default function RankingModal({ isOpen, onClose, history }: Props) {
                   ? 'The sweet spot, at a glance.'
                   : view === 1
                     ? 'A little strength. A lot of difference.'
-                    : 'The images have the last word.'}
+                    : view === 2 ? 'The images have the last word.' : 'Rounds'}
               </DialogTitle>
               <div className="flex gap-5 items-end mt-6">
                 <label className="studio-kicker flex-1 min-w-0">
@@ -242,10 +258,11 @@ export default function RankingModal({ isOpen, onClose, history }: Props) {
                     ))}
                   </select>
                 </label>
-                <label className="studio-kicker">
+                <label className={view === 3 ? 'hidden' : 'studio-kicker'}>
                   Leaderboard grouping
                   <select
                     aria-label="Leaderboard grouping"
+                    hidden={view === 3}
                     value={overall ? 'overall' : 'combination'}
                     onChange={e => setOverall(e.target.value === 'overall')}
                     className="studio-select block mt-2 text-sm normal-case tracking-normal"
@@ -254,10 +271,11 @@ export default function RankingModal({ isOpen, onClose, history }: Props) {
                     <option value="overall">Checkpoint overall</option>
                   </select>
                 </label>
-                <label className="studio-kicker">
+                <label className={view === 3 ? 'hidden' : 'studio-kicker'}>
                   Rank by
                   <select
                     aria-label="Rank by"
+                    hidden={view === 3}
                     value={rate ? 'rate' : 'survivors'}
                     onChange={e => setRate(e.target.value === 'rate')}
                     className="studio-select block mt-2 text-sm normal-case tracking-normal"
@@ -269,7 +287,7 @@ export default function RankingModal({ isOpen, onClose, history }: Props) {
               </div>
               <p className="studio-muted text-xs mt-4">
                 {rounds} tracked rounds · {data.scoped.length} generated · {kept} surviving ·{' '}
-                {data.scoped.length - kept} rejected. Keep comparing; there is no fixed trial count.
+                {data.scoped.length - kept} rejected.{view !== 3 && ' Keep comparing; there is no fixed trial count.'}
               </p>
             </header>
             {error && (
@@ -278,7 +296,7 @@ export default function RankingModal({ isOpen, onClose, history }: Props) {
               </p>
             )}
             <div className="studio-muted text-xs mb-4 flex items-center gap-4">
-              <span>Only Compare folder runs count. Manual generations are excluded.</span>
+              {view !== 3 && <span>Only Compare folder runs count. Manual generations are excluded.</span>}
               {separateEncoders ? <label className="flex items-center gap-2">Text encoder
                 <select aria-label="Ranking text encoder" value={activeEncoder} onChange={e => setEncoder(e.target.value)} className="studio-select max-w-[480px]">
                   {!encoders.length && <option value="">No encoder results</option>}
@@ -286,13 +304,13 @@ export default function RankingModal({ isOpen, onClose, history }: Props) {
                 </select>
               </label> : <span>All text encoders combined · change in Settings</span>}
             </div>
-            {new Set(rows.map(r => r.total)).size > 1 && (
+            {view !== 3 && new Set(rows.map(r => r.total)).size > 1 && (
               <p className="studio-muted text-xs mb-5">
                 Unequal exposure: compare attempt counts. More trials can produce more survivors without a higher
                 survival rate.
               </p>
             )}
-            {!rows.length ? (
+            {view === 3 ? <RoundsView records={data.scoped} folder={folder} encoder={separateEncoders ? activeEncoder : null} disabled={loading || running} onDelete={deleteRounds}/> : !rows.length ? (
               <p className="studio-muted py-16 text-center">
                 {loading
                   ? 'Loading comparisons…'
@@ -606,7 +624,7 @@ export default function RankingModal({ isOpen, onClose, history }: Props) {
                 )}
               </>
             )}
-            <p className="studio-muted text-xs mt-8 border-t border-[var(--line)] pt-4">
+            <p hidden={view === 3} className="studio-muted text-xs mt-8 border-t border-[var(--line)] pt-4">
               Ties stay tied, including the top three. Baselines are included in summary counts but do not compete;
               stacked LoRAs are excluded from rankings. Images still present are votes—not objective quality scores.
               Close, cull, compare and reopen to update.
@@ -618,7 +636,7 @@ export default function RankingModal({ isOpen, onClose, history }: Props) {
               <button onClick={() => cycle(-1)} aria-label="Previous visualisation">
                 <ArrowLeft size={18} />
               </button>
-              {[Grid2X2, LineChart, Images].map((Icon, i) => (
+              {[Grid2X2, LineChart, Images, List].map((Icon, i) => (
                 <button
                   key={views[i]}
                   onClick={() => setView(i)}

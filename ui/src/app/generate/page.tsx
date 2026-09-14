@@ -393,6 +393,22 @@ function GeneratePageInner() {
     });
   };
 
+  const forgetRounds = useCallback((ids: string[]) => {
+    if (!ids.length) return;
+    const forgotten = new Set(ids);
+    setResults(old => old.filter(r => !r.round || !forgotten.has(r.round.id)));
+    setSelected(old => old?.round && forgotten.has(old.round.id) ? null : old);
+  }, []);
+  useEffect(() => {
+    const reconcile = () => {
+      apiClient.get('/api/comparison-ledger').then(({ data }) => forgetRounds(data.forgottenRoundIds || []))
+        .catch(() => { /* Rankings reports ledger failures; keep local results until reconciliation succeeds. */ });
+    };
+    reconcile();
+    window.addEventListener('focus', reconcile);
+    return () => window.removeEventListener('focus', reconcile);
+  }, [forgetRounds]);
+
   const deleteAll = () => {
     if (!results.length) return;
     openConfirm({
@@ -1198,7 +1214,7 @@ function GeneratePageInner() {
       )}
       {sweepProgress && <div role="status" className="fixed bottom-10 left-4 z-50 max-w-[70vw] truncate rounded bg-gray-950 px-3 py-2 text-sm text-blue-300">Comparison {sweepProgress}</div>}
       <CompareFolderModal isOpen={compareOpen} onClose={() => setCompareOpen(false)} onRun={(files, baseline) => generate({ files, baseline })} />
-      <RankingModal isOpen={rankOpen} onClose={() => setRankOpen(false)} history={results} />
+      <RankingModal isOpen={rankOpen} onClose={() => setRankOpen(false)} history={results} running={running} onForgetRounds={forgetRounds} />
       <LoraBrowserModal isOpen={loraModalOpen} onClose={() => setLoraModalOpen(false)} onPick={addLora} />
     </>
   );
