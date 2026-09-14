@@ -92,6 +92,12 @@ export default function RankingModal({ isOpen, onClose, history, running = false
   );
   const encoders = [...new Set(records.filter(r => r.generation?.model?.loras?.some(l => parentFolder(l.path) === folder)).map(encoderIdentity))].sort();
   const activeEncoder = encoders.includes(encoder) ? encoder : encoders[0] || '';
+  const encoderControl = separateEncoders ? <label className="flex items-center gap-2">Text encoder
+    <select aria-label="Ranking text encoder" value={activeEncoder} onChange={e => setEncoder(e.target.value)} className="studio-select max-w-[480px]">
+      {!encoders.length && <option value="">No encoder results</option>}
+      {encoders.map(value => <option key={value} value={value}>{value.split('/').pop()}</option>)}
+    </select>
+  </label> : <span>All text encoders combined · change in Settings</span>;
   const filteredRecords = useMemo(() => separateEncoders ? records.filter(r => encoderIdentity(r) === activeEncoder) : records, [records, separateEncoders, activeEncoder]);
   const data = useMemo(() => studioData(filteredRecords, folder), [filteredRecords, folder]);
   const rows = useMemo(() => rankResults(filteredRecords, folder, overall, rate), [filteredRecords, folder, overall, rate]);
@@ -296,22 +302,17 @@ export default function RankingModal({ isOpen, onClose, history, running = false
                 {error}
               </p>
             )}
-            <div className="studio-muted text-xs mb-4 flex items-center gap-4">
+            {view !== 3 && <div className="studio-muted text-xs mb-4 flex items-center gap-4">
               {view !== 3 && <span>Only Compare folder runs count. Manual generations are excluded.</span>}
-              {separateEncoders ? <label className="flex items-center gap-2">Text encoder
-                <select aria-label="Ranking text encoder" value={activeEncoder} onChange={e => setEncoder(e.target.value)} className="studio-select max-w-[480px]">
-                  {!encoders.length && <option value="">No encoder results</option>}
-                  {encoders.map(value => <option key={value} value={value}>{value.split('/').pop()}</option>)}
-                </select>
-              </label> : <span>All text encoders combined · change in Settings</span>}
-            </div>
+              {encoderControl}
+            </div>}
             {view !== 3 && new Set(rows.map(r => r.total)).size > 1 && (
               <p className="studio-muted text-xs mb-5">
                 Unequal exposure: compare attempt counts. More trials can produce more survivors without a higher
                 survival rate.
               </p>
             )}
-            {view === 3 ? <RoundsView records={data.scoped} folder={folder} encoder={separateEncoders ? activeEncoder : null} disabled={loading || running} onDelete={deleteRounds}/> : !rows.length ? (
+            {view === 3 ? <RoundsView records={data.scoped} folder={folder} encoder={separateEncoders ? activeEncoder : null} disabled={loading || running} onDelete={deleteRounds} encoderControl={encoderControl}/> : !rows.length ? (
               <p className="studio-muted py-16 text-center">
                 {loading
                   ? 'Loading comparisons…'

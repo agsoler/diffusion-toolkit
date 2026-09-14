@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, ReactNode } from 'react';
 import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
 import { Trash2 } from 'lucide-react';
 import { EvidenceRecord } from '@/utils/rankingStudio';
@@ -11,8 +11,9 @@ type Props = {
   encoder: string | null;
   disabled: boolean;
   onDelete: (ids: string[]) => Promise<void>;
+  encoderControl: ReactNode;
 };
-export default function RoundsView({ records, folder, encoder, disabled, onDelete }: Props) {
+export default function RoundsView({ records, folder, encoder, disabled, onDelete, encoderControl }: Props) {
   const [pending, setPending] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
   const rounds = useMemo(() => {
@@ -28,9 +29,10 @@ export default function RoundsView({ records, folder, encoder, disabled, onDelet
   }, [records]);
   const targets = rounds.filter(r => pending?.includes(r.id));
   return <>
-    <div className="flex justify-end mb-5">
+    <div className="flex items-center justify-between gap-5 mb-5">
+      <div className="studio-muted text-xs min-w-0">{encoderControl}</div>
       <button disabled={disabled || !rounds.length} className="studio-pill text-[#dc9186] inline-flex gap-2 items-center disabled:opacity-40"
-        onClick={() => setPending(rounds.map(r => r.id))}><Trash2 size={15}/> Delete {rounds.length} rounds</button>
+        onClick={() => setPending(rounds.map(r => r.id))}><Trash2 size={15}/> Delete {rounds.length} {rounds.length === 1 ? 'round' : 'rounds'}</button>
     </div>
     <div className="flex justify-between studio-kicker border-b border-[var(--line)] pb-3"><span>Round / prompt</span><span>Surviving / generated</span></div>
     {rounds.map((r, index) => <article key={r.id} className="flex gap-5 py-5 border-b border-[var(--line)]">
@@ -50,16 +52,19 @@ export default function RoundsView({ records, folder, encoder, disabled, onDelet
       <div className="fixed inset-0 bg-black/75"/>
       <div className="fixed inset-0 flex items-center justify-center p-8" onKeyDown={e => e.stopPropagation()}>
         <DialogPanel className="w-[540px] rounded-xl border border-gray-600 bg-gray-900 p-8 text-gray-100 shadow-2xl">
-          <DialogTitle className="text-2xl font-serif">Delete {targets.length === 1 ? 'this round' : `${targets.length} rounds`}?</DialogTitle>
-          <p className="text-gray-300 text-sm leading-relaxed mt-4">Delete {targets.reduce((n, r) => n + r.kept, 0)} surviving files and remove {targets.reduce((n, r) => n + r.items.length, 0)} attempts from all rankings. This cannot be undone.</p>
-          <p className="text-sm mt-4 border-l-2 border-[#dc9186] pl-4 break-words">{folder}<br/>{encoder || 'All encoders'}<br/><span className="text-gray-400">Other rounds are untouched.</span></p>
+          <DialogTitle className="text-2xl font-serif">Delete {targets.length === 1 ? 'this round’s results' : `results from ${targets.length} rounds`}?</DialogTitle>
+          <p className="text-gray-300 text-sm leading-relaxed mt-4">{targets.reduce((n, r) => n + r.kept, 0) === 0
+            ? 'No generated images remain. This removes only the comparison history'
+            : `This deletes ${targets.reduce((n, r) => n + r.kept, 0)} remaining generated images and their comparison history`} ({targets.reduce((n, r) => n + r.items.length, 0)} ranking attempts). This cannot be undone.</p>
+          <p className="text-sm mt-4 border-l-2 border-gray-600 pl-4 break-words"><span className="text-gray-400">Comparison group: </span>{folder.replace(/[\\/]+$/, '').split(/[\\/]/).pop()}<br/><span className="text-gray-400">Encoder used: </span>{encoder?.split(/[\\/]/).pop() || 'All encoders'}</p>
+          <p className="text-sm text-gray-100 mt-4">Your LoRA, model and text-encoder files will not be deleted. Other rounds are untouched.</p>
           <div className="flex justify-end gap-3 mt-7">
             <button disabled={busy} className="px-4 py-2 rounded-lg border border-gray-600" onClick={() => setPending(null)}>Cancel</button>
             <button disabled={busy || disabled} className="px-4 py-2 rounded-lg bg-red-700 disabled:opacity-40" onClick={async () => {
               if (!pending) return;
               setBusy(true);
               try { await onDelete(pending); } finally { setBusy(false); setPending(null); }
-            }}>{busy ? 'Deleting…' : 'Delete permanently'}</button>
+            }}>{busy ? 'Deleting…' : 'Delete round results'}</button>
           </div>
         </DialogPanel>
       </div>
