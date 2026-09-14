@@ -1,5 +1,8 @@
 # Text encoder selection
 
+For BF16/FP8/NVFP4 conversion behaviour and memory versus disk caching, see
+[Quantization and model caching](QUANTIZATION-AND-CACHING.md).
+
 Settings → Z-Image text encoder controls the next Generate or Compare run.
 An empty path selects the stock encoder. Training job configuration is unaffected.
 The UI reads the saved setting once per run, freezes it for the comparison, and
