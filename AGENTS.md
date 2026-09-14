@@ -43,14 +43,20 @@ The development worktree is not automatically an isolated runtime. Before starti
 - Preserve unrelated edits. Do not use destructive reset/checkout/clean commands to tidy this installation.
 - Do not submit upstream PRs without Albert's approval.
 
-## Migration status when this agreement was created
+## Migration status
 
 - Both worktrees and remotes are configured.
 - The installed integration checkout remains on its original upstream base; creating the branch did not upgrade the app.
-- Existing improvements are still modified/untracked files: feature splitting, feature commits and publishing those changes remain unfinished. Do not assume `integration`'s committed history already contains the running customisations.
+- Production improvements are preserved in integration commit `5091da5`. The installed checkout still has local-only launch/server/prototype customisations; these are deliberately not part of the published production features.
+- Focused branches have been reconstructed on the clean upstream `main` base `87f8090`:
+  - `feature/generation-settings`: metadata/tooltips and restoring settings; base `main`.
+  - `feature/folder-comparison`: checkpoint/strength sweeps; base `feature/generation-settings`.
+  - `feature/survivor-ranking`: ledger, folder-scoped rankings and evidence; base `feature/folder-comparison`.
+  - `feature/themed-scrollbars`: global scrollbar styling; independent base `main`.
+- See `docs/FORK-WORKFLOW.md` for PR sequencing and the relationship to the integration baseline. Do not merge these reconstructed branches into integration just to duplicate changes already preserved there.
 - Before branching from integration for dependent work, ensure the required customisations have been captured in commits. A new branch/worktree does not inherit another worktree's uncommitted files.
 - Existing improvements include generation metadata, sending image settings back to Generate, folder comparison sweeps, survivor tracking and three ranking views, plus theme-aware scrollbars.
 - The comparison/ranking workflow is scoped to the selected LoRA output folder, supports repeated prompts without a fixed trial count, and ranks surviving images by checkpoint or checkpoint-strength combination.
 - A verified pre-restructuring backup is at `D:\Apps\LORA-Training-Backups\2026-09-14-integration`. It includes changed source, Git metadata, configuration and integrity-checked database backups, not a full copy of models/datasets.
 
-Update this status as migration proceeds. This agreement currently lives in the installed checkout; explicitly carry it into development branches that need it. Do not assume an uncommitted file appears in every linked worktree.
+Update this status as migration proceeds. This agreement is committed on integration; clean upstream-based feature branches do not automatically contain it. Consult the installed checkout's agreement when working in the linked development worktree.
