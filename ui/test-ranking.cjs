@@ -1,6 +1,6 @@
 const ts = require('typescript'), fs = require('fs'), vm = require('vm'), assert = require('node:assert/strict');
 const load = (file, requireFn = require) => {
-  const ctx = { exports: {}, require: requireFn, console };
+  const ctx = { exports: {}, require: name => name === './comparisonLoras' ? load('src/utils/comparisonLoras.ts') : requireFn(name), console };
   vm.createContext(ctx);
   vm.runInContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { target: 7, module: 1, esModuleInterop: true } }).outputText, ctx);
   return ctx.exports;

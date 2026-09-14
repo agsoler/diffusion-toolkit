@@ -23,6 +23,7 @@ import CompareFolderModal from '@/components/generate/CompareFolderModal';
 import RankingModal from '@/components/generate/RankingModal';
 import { saveComparisonHistory } from '@/utils/comparisonHistory';
 import { parentFolder } from '@/utils/comparisonRanking';
+import { supportingLoras } from '@/utils/comparisonLoras';
 
 
 interface EngineStatus {
@@ -32,7 +33,7 @@ interface EngineStatus {
 }
 
 interface ResultItem {
-  round?: { id: string; folder: string; kind: 'compare' | 'manual' };
+  round?: { id: string; folder: string; kind: 'compare' | 'manual'; candidate?: { path: string; strength?: number } | null };
   historical?: boolean;
   generation?: { model: Record<string, any>; sample: Record<string, any> };
   request_id: string;
@@ -636,24 +637,27 @@ function GeneratePageInner() {
       snapshot.sample.seed = crypto.getRandomValues(new Uint32Array(1))[0];
     }
     const batches = sweep ? [
-      ...(sweep.baseline ? [{ label: 'Base model', loras: [] }] : []),
+      ...(sweep.baseline ? [{ label: 'Reference (without tested checkpoint)', loras: [] }] : []),
       ...sweep.files.flatMap(f => [0.6, 0.8, 1.0].map(strength => ({ label: `${f.name} @ ${strength}`, loras: [{ ...f, strength }] }))),
     ] : [{ label: '', loras: snapshot.model.loras }];
     try {
-      for (let index = 0; index < batches.length; index++) {
-      if (index === 0 && arch.startsWith('zimage')) {
+      let supports: any[] = [];
+      if (sweep || arch.startsWith('zimage')) {
         const { data } = await apiClient.get('/api/settings');
-        snapshot.model.te_name_or_path = data.ZIMAGE_TEXT_ENCODER?.trim() || null;
+        if (arch.startsWith('zimage')) snapshot.model.te_name_or_path = data.ZIMAGE_TEXT_ENCODER?.trim() || null;
+        if (sweep) supports = supportingLoras(snapshot.model.loras, data.TRAINING_FOLDER, round.folder);
       }
+      for (let index = 0; index < batches.length; index++) {
       if (abort.signal.aborted) break;
       const batch = batches[index];
+      const batchRound = sweep ? { ...round, candidate: batch.loras[0] ? { path: batch.loras[0].path, strength: batch.loras[0].strength } : null } : round;
       setSweepProgress(sweep ? `${index + 1}/${batches.length} · ${batch.label}` : '');
       requestIdRef.current = null;
       setProgress(null);
       const res = await fetch(proxy('generate'), {
         method: 'POST',
         headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...snapshot, model: { ...snapshot.model, loras: batch.loras } }),
+        body: JSON.stringify({ ...snapshot, model: { ...snapshot.model, loras: sweep ? [...supports, ...batch.loras] : batch.loras } }),
         signal: abort.signal,
       });
       if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
@@ -662,12 +666,12 @@ function GeneratePageInner() {
       if (id) {
         try {
           localStorage.setItem(ACTIVE_REQUEST_KEY, id);
-          localStorage.setItem('aitk_comparison_active_round', JSON.stringify({ requestId: id, round }));
+          localStorage.setItem('aitk_comparison_active_round', JSON.stringify({ requestId: id, round: batchRound }));
         } catch {
           // storage unavailable
         }
       }
-      await consumeStream(res, abort, round);
+      await consumeStream(res, abort, batchRound);
       }
     } catch (e: any) {
       if (e?.name !== 'AbortError') setError(e?.message || String(e));

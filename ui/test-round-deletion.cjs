@@ -2,7 +2,7 @@ const ts = require('typescript'), fs = require('node:fs'), path = require('node:
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'aitk-rounds-test-'));
 const root = path.join(scratch, 'outputs'); fs.mkdirSync(root);
 const load = (file, imports = {}) => {
-  const ctx = { exports: {}, console, require: name => imports[name] || require(name) };
+  const ctx = { exports: {}, console, require: name => name === './comparisonLoras' ? load('src/utils/comparisonLoras.ts') : imports[name] || require(name) };
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { target: 7, module: 1, esModuleInterop: true } }).outputText, ctx);
   return ctx.exports;
 };

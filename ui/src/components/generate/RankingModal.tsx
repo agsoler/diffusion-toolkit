@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
 import { ArrowLeft, ArrowRight, ArrowUpRight, Grid2X2, LineChart, Images, RefreshCw, X, List } from 'lucide-react';
 import RoundsView from './RoundsView';
+import { comparisonFolder } from '@/utils/comparisonLoras';
 import { apiClient } from '@/utils/api';
 import { encodeFilePathForUrl } from '@/utils/basic';
 import { parentFolder, rankResults, Standing } from '@/utils/comparisonRanking';
@@ -55,9 +56,9 @@ export default function RankingModal({ isOpen, onClose, history, running = false
       setSeparateEncoders(settings.RANKINGS_SEPARATE_ENCODERS !== 'false');
       setRecords(data.results.filter((r: EvidenceRecord) => r.round?.kind === 'compare'));
       setLoaded(true);
-      const availableFolders = [...new Set<string>(data.results.flatMap((r: EvidenceRecord) => (r.generation?.model?.loras || []).map(l => parentFolder(l.path))))];
+      const availableFolders = [...new Set<string>(data.results.map(comparisonFolder).filter(Boolean))];
       const latest = historyRef.current.find(r => r.round?.kind === 'compare' && r.round.folder && availableFolders.includes(normalPath(r.round.folder)));
-      const first = latest || data.results.find((r: EvidenceRecord) => r.generation?.model?.loras?.length === 1);
+      const first = latest || data.results.find((r: EvidenceRecord) => comparisonFolder(r));
       setFolder(
         old =>
           (availableFolders.includes(old) ? old : '') ||
@@ -87,10 +88,10 @@ export default function RankingModal({ isOpen, onClose, history, running = false
     setVisibleImages(12);
   }, [folder, selectedKey, encoder, separateEncoders]);
   const folders = useMemo(
-    () => [...new Set(records.flatMap(r => (r.generation?.model?.loras || []).map(l => parentFolder(l.path))))].sort(),
+    () => [...new Set(records.map(comparisonFolder).filter(Boolean))].sort(),
     [records],
   );
-  const encoders = [...new Set(records.filter(r => r.generation?.model?.loras?.some(l => parentFolder(l.path) === folder)).map(encoderIdentity))].sort();
+  const encoders = [...new Set(records.filter(r => comparisonFolder(r) === folder).map(encoderIdentity))].sort();
   const activeEncoder = encoders.includes(encoder) ? encoder : encoders[0] || '';
   const encoderControl = separateEncoders ? <label className="flex items-center gap-2">Text encoder
     <select aria-label="Ranking text encoder" value={activeEncoder} onChange={e => setEncoder(e.target.value)} className="studio-select max-w-[480px]">
@@ -628,7 +629,7 @@ export default function RankingModal({ isOpen, onClose, history, running = false
             )}
             <p hidden={view === 3} className="studio-muted text-xs mt-8 border-t border-[var(--line)] pt-4">
               Ties stay tied, including the top three. Baselines are included in summary counts but do not compete;
-              stacked LoRAs are excluded from rankings. Images still present are votes—not objective quality scores.
+              supporting LoRAs do not compete. Unattributed legacy stacks are excluded. Images still present are votes—not objective quality scores.
               Close, cull, compare and reopen to update.
             </p>
             <nav

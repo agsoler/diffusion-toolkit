@@ -1,10 +1,11 @@
 import { parentFolder, rankResults, Standing } from './comparisonRanking';
+import { comparisonCandidate, comparisonFolder } from './comparisonLoras';
 
 export type EvidenceRecord = {
   path: string;
   deleted?: boolean;
   historical?: boolean;
-  round?: { id: string; folder?: string; kind?: 'compare' | 'manual' };
+  round?: { id: string; folder?: string; kind?: 'compare' | 'manual'; candidate?: { path: string; strength?: number } | null };
   generation?: {
     model?: { te_name_or_path?: string; loras?: { path: string; strength?: number }[] };
     sample?: { prompt?: string; seed?: number };
@@ -25,11 +26,7 @@ export function shortCheckpoint(path: string) {
 export function studioData(records: EvidenceRecord[], folder: string) {
   const scoped = records.filter(r => {
     if (r.round?.kind !== 'compare') return false;
-    const loras = r.generation?.model?.loras || [];
-    return (
-      loras.some(l => parentFolder(l.path) === folder) ||
-      (!loras.length && r.round?.folder && normalPath(r.round.folder) === folder)
-    );
+    return comparisonFolder(r) === folder;
   });
   const combinations = rankResults(records, folder, false, false);
   const paths = [...new Set(combinations.map(r => r.path))].sort((a, b) => {
@@ -44,12 +41,12 @@ export function evidenceFor(records: EvidenceRecord[], candidate: Standing | und
   if (!candidate) return [];
   return records.filter(r => {
     if (r.round?.kind !== 'compare') return false;
-    const loras = r.generation?.model?.loras || [];
+    const candidateLora = comparisonCandidate(r);
     return (
       !r.deleted &&
-      loras.length === 1 &&
-      normalPath(loras[0].path) === normalPath(candidate.path) &&
-      (candidate.strength === undefined || Number(loras[0].strength ?? 1) === candidate.strength) &&
+      candidateLora !== null &&
+      normalPath(candidateLora.path) === normalPath(candidate.path) &&
+      (candidate.strength === undefined || Number(candidateLora.strength ?? 1) === candidate.strength) &&
       (!prompt || r.generation?.sample?.prompt === prompt)
     );
   });

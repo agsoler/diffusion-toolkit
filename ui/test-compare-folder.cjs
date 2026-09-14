@@ -12,14 +12,17 @@ visit(src);
 assert.ok(fn);
 const code = ts.transpileModule('globalThis.run = ' + fn, { compilerOptions: { target: 7 } }).outputText;
 async function test(mode, sweep = true) {
-  const requests = []; const errors = []; let ended = false; let controller;
+  const requests = []; const errors = []; const rounds = []; let ended = false; let controller;
+  const helper = { exports: {} };
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/utils/comparisonLoras.ts', 'utf8'), {compilerOptions:{target:7,module:1}}).outputText, helper);
   const noop = () => {};
   const ctx = {
     ready: mode !== 'stopped', running: false,
-    apiClient: { get: async () => ({ data: { ZIMAGE_TEXT_ENCODER: 'test-encoder.safetensors' } }) },
+    supportingLoras: helper.exports.supportingLoras,
+    apiClient: { get: async () => ({ data: { ZIMAGE_TEXT_ENCODER: 'test-encoder.safetensors', TRAINING_FOLDER: 'D:/Training' } }) },
     model: { name_or_path: 'base', loras: [{ path: 'old', strength: 0.2 }] },
     arch: 'zimage:turbo', sample: { prompt: 'fixed', seed: -1, width: 768, height: 1024 },
-    activeLoras: [{ path: 'old', strength: 0.2 }],
+    activeLoras: [{ path: 'old', strength: 0.2 }, { path: 'D:/Training/other/model.safetensors', strength: 0.9 }],
     beginRun: () => (controller = new AbortController()),
     endRun: () => { ended = true; }, setStatusLine: noop, setSweepProgress: noop, setProgress: noop,
     setError: e => errors.push(e), previewSizeRef: {}, requestIdRef: {},
@@ -27,10 +30,10 @@ async function test(mode, sweep = true) {
     parentFolder: p => p.replace(/[\\/][^\\/]+$/, ''),
     proxy: x => x, authHeaders: () => ({}), localStorage: { setItem: noop },
     fetch: async (_, opts) => { requests.push(JSON.parse(opts.body)); return { ok: true, headers: { get: () => 'id' } }; },
-    consumeStream: async () => { if (mode === 'cancel') controller.abort(); if (mode === 'error') throw Error('failure'); },
+    consumeStream: async (_res, _abort, round) => { rounds.push(round); if (mode === 'cancel') controller.abort(); if (mode === 'error') throw Error('failure'); },
   };
   vm.createContext(ctx); vm.runInContext(code, ctx);
-  const files = Array.from({ length: 4 }, (_, i) => ({ path: `checkpoint${i}`, name: `checkpoint${i}` }));
+  const files = Array.from({ length: 4 }, (_, i) => ({ path: `D:/Training/job/checkpoint${i}`, name: `checkpoint${i}` }));
   await ctx.run(sweep ? { files, baseline: true } : undefined);
   if (mode === 'stopped') { assert.equal(requests.length, 0); return; }
   assert.ok(ended);
@@ -38,12 +41,16 @@ async function test(mode, sweep = true) {
   if (mode === 'cancel' || mode === 'error') { assert.equal(requests.length, 1); assert.equal(errors.length, mode === 'error' ? 1 : 0); return; }
   if (!sweep) { assert.equal(requests.length, 1); assert.equal(requests[0].model.loras[0].path, 'old'); return; }
   assert.equal(requests.length, 13);
-  assert.equal(requests[0].model.loras.length, 0);
+  assert.equal(requests[0].model.loras.length, 1);
+  assert.equal(rounds[0].candidate, null);
   requests.forEach(r => { assert.equal(r.model.te_name_or_path, 'test-encoder.safetensors'); assert.equal(r.sample.seed, 123); assert.equal(r.sample.prompt, 'fixed'); });
   for (let i = 1; i < 13; i++) {
-    assert.equal(requests[i].model.loras.length, 1);
-    assert.equal(requests[i].model.loras[0].strength, [0.6, 0.8, 1][(i - 1) % 3]);
-    assert.equal(requests[i].model.loras[0].path, `checkpoint${Math.floor((i - 1) / 3)}`);
+    assert.equal(requests[i].model.loras.length, 2);
+    assert.equal(requests[i].model.loras[0].strength, 0.2);
+    assert.equal(requests[i].model.loras[0].path, 'old');
+    assert.equal(requests[i].model.loras[1].strength, [0.6, 0.8, 1][(i - 1) % 3]);
+    assert.equal(requests[i].model.loras[1].path, `D:/Training/job/checkpoint${Math.floor((i - 1) / 3)}`);
+    assert.equal(rounds[i].candidate.path, requests[i].model.loras[1].path);
   }
 }
 (async () => {
