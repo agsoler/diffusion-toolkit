@@ -28,6 +28,7 @@ interface EngineStatus {
 }
 
 interface ResultItem {
+  generation?: { model: Record<string, any>; sample: Record<string, any> };
   request_id: string;
   path: string;
   seconds?: number;
@@ -39,6 +40,26 @@ interface ResultItem {
   height: number;
   prompt: string;
   arch: string;
+}
+
+function loraSummary(result: ResultItem): string {
+  if (!result.generation) return 'LoRAs: unknown (not recorded)';
+  const loras = result.generation.model.loras || [];
+  if (!loras.length) return 'LoRAs: none (base model)';
+  return loras.map((l: { path: string; strength?: number }) =>
+    `${l.path.split(/[\\/]/).pop()} @ ${l.strength ?? 1}`,
+  ).join(' · ');
+}
+
+function resultDetails(result: ResultItem): string {
+  const g = result.generation;
+  return [
+    `Model: ${g?.model.name_or_path || result.arch}`,
+    loraSummary(result),
+    ...(g?.model.loras || []).map((l: { path: string; strength?: number }) => `${l.path} (strength ${l.strength ?? 1})`),
+    `Seed: ${result.seed} · ${result.width} × ${result.height} · Steps: ${result.steps ?? g?.sample.num_inference_steps ?? 'unknown'} · Guidance: ${g?.sample.guidance_scale ?? 'unknown'}`,
+    `Prompt: ${result.prompt}`,
+  ].join('\n');
 }
 
 const qtypeOptions = [
@@ -300,6 +321,35 @@ function GeneratePageInner() {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(persisted.sidebarOpen ?? true);
   const [cards, setCards] = useState<{ [key: string]: boolean }>(persisted.cards || {});
   const [loraModalOpen, setLoraModalOpen] = useState(false);
+  const [resultMenu, setResultMenu] = useState<{ result: ResultItem; x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!resultMenu) return;
+    const dismiss = (e: KeyboardEvent) => { if (e.key === 'Escape') setResultMenu(null); };
+    const close = () => setResultMenu(null);
+    window.addEventListener('keydown', dismiss);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('keydown', dismiss);
+      window.removeEventListener('resize', close);
+    };
+  }, [resultMenu]);
+  const restoreResult = (result: ResultItem) => {
+    if (!result.generation) return;
+    const saved = JSON.parse(JSON.stringify(result.generation));
+    setArch(saved.model.arch || result.arch);
+    setModel({ ...saved.model, loras: (saved.model.loras || []).map((l: any) => ({
+      ...l, name: l.name || l.path.split(/[\\/]/).pop(), strength: l.strength ?? 1,
+    })) });
+    setSample({ ...saved.sample, prompt: result.prompt, seed: result.seed,
+      width: result.width, height: result.height,
+      num_inference_steps: result.steps ?? saved.sample.num_inference_steps,
+    });
+    setSelected(result);
+    setShowPreview(false);
+    setSidebarOpen(true);
+    setCards(c => ({ ...c, model: true, loras: true, prompt: true }));
+    setResultMenu(null);
+  };
   type LoraItem = { path: string; name: string; strength: number; disabled?: boolean };
   const loras: LoraItem[] = model.loras || [];
   const setLoras = (next: LoraItem[]) => setModel(m => ({ ...m, loras: next }));
@@ -424,6 +474,8 @@ function GeneratePageInner() {
   const consumeStream = async (res: Response, abort: AbortController) => {
     let preview: PreviewInfo | null = null;
     let startInfo: { arch: string; prompt: string } = { arch, prompt: sample.prompt || '' };
+    // Use engine-confirmed settings, including when reattaching a stream.
+    let generation: ResultItem['generation'];
     // only the first latent of a run pulls the stage to the preview; after
     // that the user may browse history and come back via the live tile
     let shownPreview = false;
@@ -434,6 +486,10 @@ function GeneratePageInner() {
         switch (header.type) {
           case 'start':
             preview = header.preview;
+            generation = header.model && header.sample
+              ? JSON.parse(JSON.stringify({ model: header.model, sample: header.sample }))
+              : undefined;
+
             startInfo = { arch: header.model?.arch || arch, prompt: header.sample?.prompt ?? '' };
             if (header.sample?.width && header.sample?.height) {
               previewSizeRef.current = { width: header.sample.width, height: header.sample.height };
@@ -468,6 +524,7 @@ function GeneratePageInner() {
           }
           case 'result': {
             const item: ResultItem = {
+              generation,
               request_id: header.request_id,
               path: header.path,
               kind: header.kind,
@@ -741,11 +798,11 @@ function GeneratePageInner() {
               {/* status strip over the stage */}
               <div className="absolute top-0 left-0 right-0 z-10 px-3 py-1.5 flex items-center gap-2 text-xs text-gray-300 bg-gradient-to-b from-gray-950/80 to-transparent">
                 {running && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />}
-                <span className="truncate">
+                <span className="truncate" title={selected ? resultDetails(selected) : undefined}>
                   {running
                     ? statusLine
                     : selected
-                      ? `${selected.arch} · seed ${selected.seed}${selected.seconds ? ` · ${selected.seconds.toFixed(1)}s${selected.steps ? ` / ${selected.steps} steps` : ''}` : ''}`
+                      ? `${selected.arch} · seed ${selected.seed} · ${loraSummary(selected)}${selected.seconds ? ` · ${selected.seconds.toFixed(1)}s${selected.steps ? ` / ${selected.steps} steps` : ''}` : ''}`
                       : ''}
                 </span>
                 {progress ? (
@@ -838,7 +895,14 @@ function GeneratePageInner() {
                             setSelected(r);
                             setShowPreview(false);
                           }}
-                          title={`${r.arch} · seed ${r.seed} · ${r.prompt}`}
+                          title={resultDetails(r)}
+                          onContextMenu={e => {
+                            e.preventDefault();
+                            setResultMenu({ result: r,
+                              x: Math.max(8, Math.min(e.clientX, window.innerWidth - 296)),
+                              y: Math.max(8, Math.min(e.clientY, window.innerHeight - 100)),
+                            });
+                          }}
                           className={`h-16 w-16 rounded-md overflow-hidden border-2 ${isSel ? 'border-blue-500' : 'border-transparent hover:border-gray-600'} bg-gray-800 block`}
                         >
                           {r.kind === 'audio' ? (
@@ -1066,6 +1130,19 @@ function GeneratePageInner() {
         </div>
       </MainContent>
       <GenerateFooter jobId={engineJobId} status={footerStatus} busy={running || isStarting} progress={running ? progress : null} />
+      {resultMenu && (
+        <div className="fixed inset-0 z-[100]" onClick={() => setResultMenu(null)} onContextMenu={e => { e.preventDefault(); setResultMenu(null); }}>
+          <div role="menu" aria-label="Image settings" className="fixed w-72 rounded-lg border border-gray-600 bg-gray-900 p-1 shadow-xl"
+            style={{ left: resultMenu.x, top: resultMenu.y }} onClick={e => e.stopPropagation()}>
+            <button type="button" role="menuitem" autoFocus disabled={!resultMenu.result.generation}
+              className="w-full rounded px-3 py-2 text-left text-sm text-gray-100 hover:bg-gray-700 focus:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={() => restoreResult(resultMenu.result)}>
+              Send settings to right panel
+            </button>
+            {!resultMenu.result.generation && <p className="px-3 py-1 text-xs text-gray-400">Settings were not recorded for this older image.</p>}
+          </div>
+        </div>
+      )}
       <LoraBrowserModal isOpen={loraModalOpen} onClose={() => setLoraModalOpen(false)} onPick={addLora} />
     </>
   );
