@@ -3,7 +3,7 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@headlessui/react';
-import { ChevronDown, ChevronLeft, ChevronRight, Loader2, OctagonX, Play, Plus, Square, Sparkles, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Loader2, OctagonX, Play, Plus, Square, Sparkles, Trash2, X, Trophy, PanelsTopLeft } from 'lucide-react';
 import { openConfirm } from '@/components/ConfirmModal';
 import { TopBar, MainContent } from '@/components/layout';
 import { Checkbox, CreatableSelectInput, NumberInput, SelectInput, SliderInput, TextAreaInput, TextInput } from '@/components/formInputs';
@@ -19,6 +19,10 @@ import { isMac } from '@/helpers/basic';
 import { modelArchs, getGenerateDefaults, GenerateDefaults } from '@/app/jobs/new/options';
 import GenerateFooter from '@/components/generate/GenerateFooter';
 import LoraBrowserModal, { LoraPick } from '@/components/generate/LoraBrowserModal';
+import CompareFolderModal from '@/components/generate/CompareFolderModal';
+import RankingModal from '@/components/generate/RankingModal';
+import { saveComparisonHistory } from '@/utils/comparisonHistory';
+import { parentFolder } from '@/utils/comparisonRanking';
 
 
 interface EngineStatus {
@@ -28,6 +32,9 @@ interface EngineStatus {
 }
 
 interface ResultItem {
+  round?: { id: string; folder: string };
+  historical?: boolean;
+  generation?: { model: Record<string, any>; sample: Record<string, any> };
   request_id: string;
   path: string;
   seconds?: number;
@@ -39,6 +46,26 @@ interface ResultItem {
   height: number;
   prompt: string;
   arch: string;
+}
+
+function loraSummary(result: ResultItem): string {
+  if (!result.generation) return 'LoRAs: unknown (not recorded)';
+  const loras = result.generation.model.loras || [];
+  if (!loras.length) return 'LoRAs: none (base model)';
+  return loras.map((l: { path: string; strength?: number }) =>
+    `${l.path.split(/[\\/]/).pop()} @ ${l.strength ?? 1}`,
+  ).join(' · ');
+}
+
+function resultDetails(result: ResultItem): string {
+  const g = result.generation;
+  return [
+    `Model: ${g?.model.name_or_path || result.arch}`,
+    loraSummary(result),
+    ...(g?.model.loras || []).map((l: { path: string; strength?: number }) => `${l.path} (strength ${l.strength ?? 1})`),
+    `Seed: ${result.seed} · ${result.width} × ${result.height} · Steps: ${result.steps ?? g?.sample.num_inference_steps ?? 'unknown'} · Guidance: ${g?.sample.guidance_scale ?? 'unknown'}`,
+    `Prompt: ${result.prompt}`,
+  ].join('\n');
 }
 
 const qtypeOptions = [
@@ -300,6 +327,38 @@ function GeneratePageInner() {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(persisted.sidebarOpen ?? true);
   const [cards, setCards] = useState<{ [key: string]: boolean }>(persisted.cards || {});
   const [loraModalOpen, setLoraModalOpen] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [rankOpen, setRankOpen] = useState(false);
+  const [sweepProgress, setSweepProgress] = useState('');
+  const [resultMenu, setResultMenu] = useState<{ result: ResultItem; x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!resultMenu) return;
+    const dismiss = (e: KeyboardEvent) => { if (e.key === 'Escape') setResultMenu(null); };
+    const close = () => setResultMenu(null);
+    window.addEventListener('keydown', dismiss);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('keydown', dismiss);
+      window.removeEventListener('resize', close);
+    };
+  }, [resultMenu]);
+  const restoreResult = (result: ResultItem) => {
+    if (!result.generation) return;
+    const saved = JSON.parse(JSON.stringify(result.generation));
+    setArch(saved.model.arch || result.arch);
+    setModel({ ...saved.model, loras: (saved.model.loras || []).map((l: any) => ({
+      ...l, name: l.name || l.path.split(/[\\/]/).pop(), strength: l.strength ?? 1,
+    })) });
+    setSample({ ...saved.sample, prompt: result.prompt, seed: result.seed,
+      width: result.width, height: result.height,
+      num_inference_steps: result.steps ?? saved.sample.num_inference_steps,
+    });
+    setSelected(result);
+    setShowPreview(false);
+    setSidebarOpen(true);
+    setCards(c => ({ ...c, model: true, loras: true, prompt: true }));
+    setResultMenu(null);
+  };
   type LoraItem = { path: string; name: string; strength: number; disabled?: boolean };
   const loras: LoraItem[] = model.loras || [];
   const setLoras = (next: LoraItem[]) => setModel(m => ({ ...m, loras: next }));
@@ -315,6 +374,8 @@ function GeneratePageInner() {
   const deleteResults = async (items: ResultItem[]) => {
     const paths = items.map(i => i.path);
     try {
+      // Save evaluation evidence before any file can disappear.
+      await saveComparisonHistory(items);
       await apiClient.post('/api/inference/outputs/delete', { paths });
     } catch (e: any) {
       alert(`Failed to delete: ${e?.response?.data?.error || e?.message || e}`);
@@ -421,9 +482,14 @@ function GeneratePageInner() {
 
   // one consumer for both a fresh /generate response and a /stream/{id}
   // reattach: everything the stage needs comes from the frames themselves
-  const consumeStream = async (res: Response, abort: AbortController) => {
+  const consumeStream = async (res: Response, abort: AbortController, round?: ResultItem['round']) => {
+    const finishedResults: ResultItem[] = [];
     let preview: PreviewInfo | null = null;
     let startInfo: { arch: string; prompt: string } = { arch, prompt: sample.prompt || '' };
+    // Capture engine-confirmed settings, never the currently edited sidebar.
+    // Reattached streams replay the same start frame.
+    let generation: ResultItem['generation'];
+    let completed = false;
     // only the first latent of a run pulls the stage to the preview; after
     // that the user may browse history and come back via the live tile
     let shownPreview = false;
@@ -434,6 +500,9 @@ function GeneratePageInner() {
         switch (header.type) {
           case 'start':
             preview = header.preview;
+            generation = header.model && header.sample
+              ? JSON.parse(JSON.stringify({ model: header.model, sample: header.sample }))
+              : undefined;
             startInfo = { arch: header.model?.arch || arch, prompt: header.sample?.prompt ?? '' };
             if (header.sample?.width && header.sample?.height) {
               previewSizeRef.current = { width: header.sample.width, height: header.sample.height };
@@ -468,6 +537,9 @@ function GeneratePageInner() {
           }
           case 'result': {
             const item: ResultItem = {
+              round,
+              historical: false,
+              generation,
               request_id: header.request_id,
               path: header.path,
               kind: header.kind,
@@ -480,21 +552,28 @@ function GeneratePageInner() {
               prompt: startInfo.prompt,
               arch: startInfo.arch,
             };
-            setResults(r => (r.some(x => x.path === item.path) ? r : [item, ...r]));
-            setSelected(item);
-            setShowPreview(false);
+            finishedResults.push(item);
             break;
           }
           case 'error':
-            setError(header.cancelled ? 'Cancelled' : header.message);
-            break;
+            throw new Error(header.cancelled ? 'Cancelled' : header.message);
           case 'end':
             setStatusLine(header.status === 'done' ? 'Done' : header.status);
+            completed = header.status === 'done';
             break;
         }
       },
       abort.signal,
     );
+    if (!abort.signal.aborted && !completed) throw new Error('Generation did not complete; remaining comparisons stopped.');
+    if (completed && finishedResults.length) {
+      // Failed/cancelled streams must not contribute attempts or survivors.
+      setResults(previous => [...finishedResults.filter(item => !previous.some(r => r.path === item.path)), ...previous]);
+      setSelected(finishedResults[finishedResults.length - 1]);
+      setShowPreview(false);
+      try { await saveComparisonHistory(finishedResults); }
+      catch { throw new Error('Images generated, but ranking records could not be saved. Open Rank to retry importing history before continuing.'); }
+    }
   };
 
   const beginRun = () => {
@@ -524,7 +603,7 @@ function GeneratePageInner() {
     }
   };
 
-  const generate = async () => {
+  const generate = async (sweep?: { files: LoraPick[]; baseline: boolean }) => {
     if (!ready || running) return;
     const abort = beginRun();
     setStatusLine('Submitting');
@@ -534,11 +613,26 @@ function GeneratePageInner() {
       sample: { ...sample, seed: sample.seed === '' ? -1 : sample.seed },
       stream: { latents: 'raw', every_n_steps: 1, max_frames: 0 },
     };
+    const snapshot = JSON.parse(JSON.stringify(body));
+    const round = { id: crypto.randomUUID(), folder: sweep?.files.length ? parentFolder(sweep.files[0].path) : activeLoras.length === 1 ? parentFolder(activeLoras[0].path) : '' };
+    if (sweep && (snapshot.sample.seed == null || Number(snapshot.sample.seed) < 0)) {
+      snapshot.sample.seed = crypto.getRandomValues(new Uint32Array(1))[0];
+    }
+    const batches = sweep ? [
+      ...(sweep.baseline ? [{ label: 'Base model', loras: [] }] : []),
+      ...sweep.files.flatMap(f => [0.6, 0.8, 1.0].map(strength => ({ label: `${f.name} @ ${strength}`, loras: [{ ...f, strength }] }))),
+    ] : [{ label: '', loras: snapshot.model.loras }];
     try {
+      for (let index = 0; index < batches.length; index++) {
+      if (abort.signal.aborted) break;
+      const batch = batches[index];
+      setSweepProgress(sweep ? `${index + 1}/${batches.length} · ${batch.label}` : '');
+      requestIdRef.current = null;
+      setProgress(null);
       const res = await fetch(proxy('generate'), {
         method: 'POST',
         headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...snapshot, model: { ...snapshot.model, loras: batch.loras } }),
         signal: abort.signal,
       });
       if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
@@ -547,14 +641,17 @@ function GeneratePageInner() {
       if (id) {
         try {
           localStorage.setItem(ACTIVE_REQUEST_KEY, id);
+          localStorage.setItem('aitk_comparison_active_round', JSON.stringify({ requestId: id, round }));
         } catch {
           // storage unavailable
         }
       }
-      await consumeStream(res, abort);
+      await consumeStream(res, abort, round);
+      }
     } catch (e: any) {
       if (e?.name !== 'AbortError') setError(e?.message || String(e));
     } finally {
+      setSweepProgress('');
       endRun();
     }
   };
@@ -571,7 +668,9 @@ function GeneratePageInner() {
     try {
       const res = await fetch(proxy(`stream/${id}`), { headers: authHeaders(), signal: abort.signal });
       if (!res.ok) throw new Error(res.status === 404 ? 'previous generation is gone' : `HTTP ${res.status}`);
-      await consumeStream(res, abort);
+      let round: ResultItem['round'];
+      try { const saved = JSON.parse(localStorage.getItem('aitk_comparison_active_round') || 'null'); if (saved?.requestId === id) round = saved.round; } catch {}
+      await consumeStream(res, abort, round);
     } catch (e: any) {
       if (e?.name !== 'AbortError') setError(e?.message || String(e));
     } finally {
@@ -628,6 +727,8 @@ function GeneratePageInner() {
 
   const cancel = async () => {
     const id = requestIdRef.current;
+    // Stop the client queue immediately, before waiting for server cancellation.
+    abortRef.current?.abort();
     if (id) {
       try {
         await apiClient.post(proxy(`cancel/${id}`));
@@ -663,6 +764,7 @@ function GeneratePageInner() {
           <h1 className="text-base sm:text-lg">Generate</h1>
         </div>
         <div className="flex-1" />
+        {!ready && <Button onClick={() => setRankOpen(true)} title="Rank survivors — no GPU required" aria-label="Rank survivors" className="p-2 mr-2 rounded border border-amber-400/40 text-amber-200 hover:bg-amber-950/40"><Trophy className="w-5 h-5" /></Button>}
         <div className="flex items-center gap-2 text-xs sm:text-sm">
           {isStopping ? (
             <>
@@ -741,11 +843,11 @@ function GeneratePageInner() {
               {/* status strip over the stage */}
               <div className="absolute top-0 left-0 right-0 z-10 px-3 py-1.5 flex items-center gap-2 text-xs text-gray-300 bg-gradient-to-b from-gray-950/80 to-transparent">
                 {running && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />}
-                <span className="truncate">
+                <span className="truncate" title={selected ? resultDetails(selected) : undefined}>
                   {running
                     ? statusLine
                     : selected
-                      ? `${selected.arch} · seed ${selected.seed}${selected.seconds ? ` · ${selected.seconds.toFixed(1)}s${selected.steps ? ` / ${selected.steps} steps` : ''}` : ''}`
+                      ? `${selected.arch} · seed ${selected.seed} · ${loraSummary(selected)}${selected.seconds ? ` · ${selected.seconds.toFixed(1)}s${selected.steps ? ` / ${selected.steps} steps` : ''}` : ''}`
                       : ''}
                 </span>
                 {progress ? (
@@ -838,7 +940,14 @@ function GeneratePageInner() {
                             setSelected(r);
                             setShowPreview(false);
                           }}
-                          title={`${r.arch} · seed ${r.seed} · ${r.prompt}`}
+                          title={resultDetails(r)}
+                          onContextMenu={e => {
+                            e.preventDefault();
+                            setResultMenu({ result: r,
+                              x: Math.max(8, Math.min(e.clientX, window.innerWidth - 296)),
+                              y: Math.max(8, Math.min(e.clientY, window.innerHeight - 100)),
+                            });
+                          }}
                           className={`h-16 w-16 rounded-md overflow-hidden border-2 ${isSel ? 'border-blue-500' : 'border-transparent hover:border-gray-600'} bg-gray-800 block`}
                         >
                           {r.kind === 'audio' ? (
@@ -1048,13 +1157,16 @@ function GeneratePageInner() {
               {/* always-visible action bar */}
               <div className="shrink-0 p-2 border-t border-gray-800 bg-gray-900 flex gap-2">
                 <Button
-                  onClick={generate}
+                  onClick={() => generate()}
                   disabled={!ready || running || !model.name_or_path}
                   className="flex-1 px-3 py-1.5 rounded-md bg-blue-700 hover:bg-blue-600 disabled:opacity-40 text-white text-sm flex items-center justify-center gap-2"
                   title="Ctrl/Cmd + Enter"
                 >
                   {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Generate
                 </Button>
+                <Button onClick={() => setCompareOpen(true)} disabled={!ready || running || !model.name_or_path}
+                  title="Compare folder" aria-label="Compare folder" className="px-3 py-1.5 rounded-md bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white text-sm"><PanelsTopLeft className="w-5 h-5" /></Button>
+                <Button onClick={() => setRankOpen(true)} title="Rank survivors" aria-label="Rank survivors" className="px-3 py-1.5 rounded-md border border-amber-400/40 text-amber-200 hover:bg-amber-950/40"><Trophy className="w-5 h-5" /></Button>
                 {running && (
                   <Button onClick={cancel} className="px-3 py-2 rounded-md bg-gray-700 hover:bg-gray-600 text-white">
                     Cancel
@@ -1066,6 +1178,22 @@ function GeneratePageInner() {
         </div>
       </MainContent>
       <GenerateFooter jobId={engineJobId} status={footerStatus} busy={running || isStarting} progress={running ? progress : null} />
+      {resultMenu && (
+        <div className="fixed inset-0 z-[100]" onClick={() => setResultMenu(null)} onContextMenu={e => { e.preventDefault(); setResultMenu(null); }}>
+          <div role="menu" aria-label="Image settings" className="fixed w-72 rounded-lg border border-gray-600 bg-gray-900 p-1 shadow-xl"
+            style={{ left: resultMenu.x, top: resultMenu.y }} onClick={e => e.stopPropagation()}>
+            <button type="button" role="menuitem" autoFocus disabled={!resultMenu.result.generation}
+              className="w-full rounded px-3 py-2 text-left text-sm text-gray-100 hover:bg-gray-700 focus:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={() => restoreResult(resultMenu.result)}>
+              Send settings to right panel
+            </button>
+            {!resultMenu.result.generation && <p className="px-3 py-1 text-xs text-gray-400">Settings were not recorded for this older image.</p>}
+          </div>
+        </div>
+      )}
+      {sweepProgress && <div role="status" className="fixed bottom-10 left-4 z-50 max-w-[70vw] truncate rounded bg-gray-950 px-3 py-2 text-sm text-blue-300">Comparison {sweepProgress}</div>}
+      <CompareFolderModal isOpen={compareOpen} onClose={() => setCompareOpen(false)} onRun={(files, baseline) => generate({ files, baseline })} />
+      <RankingModal isOpen={rankOpen} onClose={() => setRankOpen(false)} history={results} />
       <LoraBrowserModal isOpen={loraModalOpen} onClose={() => setLoraModalOpen(false)} onPick={addLora} />
     </>
   );
