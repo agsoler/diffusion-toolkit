@@ -46,7 +46,7 @@ export default function RankingModal({ isOpen, onClose, history }: Props) {
       await saveComparisonHistory(historyRef.current);
       const { data } = await apiClient.get('/api/comparison-ledger');
       if (request.current !== id) return;
-      setRecords(data.results);
+      setRecords(data.results.filter((r: EvidenceRecord) => r.round?.kind === 'compare'));
       setLoaded(true);
       const latest = historyRef.current.find(r => r.round?.folder || r.generation?.model?.loras?.length === 1);
       const first = latest || data.results.find((r: EvidenceRecord) => r.generation?.model?.loras?.length === 1);
@@ -269,12 +269,7 @@ export default function RankingModal({ isOpen, onClose, history }: Props) {
                 {error}
               </p>
             )}
-            {data.scoped.some(r => r.historical) && (
-              <p className="studio-muted text-xs border-l-2 border-[var(--accent)] pl-3 mb-4">
-                Incomplete older history: imported survivors count, but previously deleted images cannot be
-                reconstructed.
-              </p>
-            )}
+            <p className="studio-muted text-xs mb-4">Only Compare folder runs count. Manual generations are excluded.</p>
             {new Set(rows.map(r => r.total)).size > 1 && (
               <p className="studio-muted text-xs mb-5">
                 Unequal exposure: compare attempt counts. More trials can produce more survivors without a higher

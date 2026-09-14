@@ -32,7 +32,7 @@ interface EngineStatus {
 }
 
 interface ResultItem {
-  round?: { id: string; folder: string };
+  round?: { id: string; folder: string; kind: 'compare' | 'manual' };
   historical?: boolean;
   generation?: { model: Record<string, any>; sample: Record<string, any> };
   request_id: string;
@@ -614,7 +614,7 @@ function GeneratePageInner() {
       stream: { latents: 'raw', every_n_steps: 1, max_frames: 0 },
     };
     const snapshot = JSON.parse(JSON.stringify(body));
-    const round = { id: crypto.randomUUID(), folder: sweep?.files.length ? parentFolder(sweep.files[0].path) : activeLoras.length === 1 ? parentFolder(activeLoras[0].path) : '' };
+    const round: ResultItem['round'] = { id: crypto.randomUUID(), kind: sweep ? 'compare' : 'manual', folder: sweep?.files.length ? parentFolder(sweep.files[0].path) : activeLoras.length === 1 ? parentFolder(activeLoras[0].path) : '' };
     if (sweep && (snapshot.sample.seed == null || Number(snapshot.sample.seed) < 0)) {
       snapshot.sample.seed = crypto.getRandomValues(new Uint32Array(1))[0];
     }

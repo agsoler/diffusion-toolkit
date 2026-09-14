@@ -2,7 +2,7 @@ import { apiClient } from '@/utils/api';
 
 // Bound individual requests, not the number of trials in an evaluation.
 export async function saveComparisonHistory(results: any[]) {
-  const records = results.filter(r => r.generation).map(r => ({ ...r, historical: r.historical ?? !r.round }));
+  const records = results.filter(r => r.generation && r.round?.kind === 'compare');
   let batch: any[] = [];
   let size = 20;
   for (const record of records) {

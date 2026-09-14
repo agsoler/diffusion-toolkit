@@ -4,7 +4,7 @@ export type EvidenceRecord = {
   path: string;
   deleted?: boolean;
   historical?: boolean;
-  round?: { id: string; folder?: string };
+  round?: { id: string; folder?: string; kind?: 'compare' | 'manual' };
   generation?: {
     model?: { loras?: { path: string; strength?: number }[] };
     sample?: { prompt?: string; seed?: number };
@@ -24,6 +24,7 @@ export function shortCheckpoint(path: string) {
 }
 export function studioData(records: EvidenceRecord[], folder: string) {
   const scoped = records.filter(r => {
+    if (r.round?.kind !== 'compare') return false;
     const loras = r.generation?.model?.loras || [];
     return (
       loras.some(l => parentFolder(l.path) === folder) ||
@@ -42,6 +43,7 @@ export function studioData(records: EvidenceRecord[], folder: string) {
 export function evidenceFor(records: EvidenceRecord[], candidate: Standing | undefined, prompt = '') {
   if (!candidate) return [];
   return records.filter(r => {
+    if (r.round?.kind !== 'compare') return false;
     const loras = r.generation?.model?.loras || [];
     return (
       !r.deleted &&

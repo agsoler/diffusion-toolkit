@@ -8,8 +8,13 @@ const load = (file, requireFn = require) => {
 const { rankResults } = load('src/utils/comparisonRanking.ts');
 const ranking = load('src/utils/comparisonRanking.ts');
 const studio = load('src/utils/rankingStudio.ts', name => name === './comparisonRanking' ? ranking : require(name));
-const record = (p, strength, deleted = false) => ({ path: Math.random().toString(), generation: { model: { loras: p ? [{ path: p, strength }] : [] }, sample: { prompt: 'test' } }, deleted });
+const record = (p, strength, deleted = false) => ({ path: Math.random().toString(), round: {id: 'test', kind: 'compare'}, generation: { model: { loras: p ? [{ path: p, strength }] : [] }, sample: { prompt: 'test' } }, deleted });
 const rs = [record('D:/A/750.safetensors', .6), record('D:/A/750.safetensors', .6, true), record('D:/A/500.safetensors', .8), record('D:/A/750.safetensors', .8), record('D:/B/other.safetensors', 1), record(null)];
+const manual = {...record('D:/A/750.safetensors', .6), round: {id:'manual', kind:'manual'}};
+const unknown = {...manual, round: undefined};
+assert.equal(rankResults([manual, unknown], 'D:/A', false, false).length, 0);
+assert.equal(studio.studioData([manual, unknown], 'D:/A').scoped.length, 0);
+assert.equal(studio.evidenceFor([manual, unknown], rankResults(rs, 'D:/A', false, false)[0]).length, 0);
 let r = rankResults(rs, 'D:/A', false, false);
 assert.equal(r.length, 3); assert.ok(r.every(x => x.rank === 1));
 r = rankResults(rs, 'D:/A', true, false);
@@ -35,6 +40,10 @@ const dir = fs.mkdtempSync(require('path').join(require('os').tmpdir(), 'aitk-le
 let missing = false;
 const ledger = load('src/server/comparisonLedger.ts', name => name === '@/paths' ? { TOOLKIT_ROOT: dir } : name === 'fs/promises' ? { stat: async () => { if(missing) throw Object.assign(Error('missing'), {code:'ENOENT'}); return {}; } } : require(name));
 (async () => {
+  await history.saveComparisonHistory([manual, unknown]);
+  assert.equal(batches.length, 0);
+  await ledger.recordResults([manual, unknown]);
+  assert.equal((await ledger.readResults()).length, 0);
   await history.saveComparisonHistory(large);
   assert.equal(batches.length, 7);
   assert.equal(batches.reduce((n, batch) => n + batch.length, 0), 650);

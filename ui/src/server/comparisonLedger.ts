@@ -10,6 +10,7 @@ const ready = run(`CREATE TABLE IF NOT EXISTS results (path TEXT PRIMARY KEY, pa
 export async function recordResults(items: any[]) {
   await ready;
   for (const r of items) {
+    if (r?.round?.kind !== 'compare') continue;
     if (!r || typeof r.path !== 'string' || !r.generation?.model || !r.generation?.sample) continue;
     await run('INSERT OR IGNORE INTO results(path,payload) VALUES (?,?)', [r.path, JSON.stringify(r)]);
   }
@@ -26,7 +27,8 @@ export async function readResults() {
         else throw e;
       }
     }
-    output.push({ ...JSON.parse(row.payload), deleted });
+    const record = JSON.parse(row.payload);
+    if (record.round?.kind === 'compare') output.push({ ...record, deleted });
   }
   return output;
 }

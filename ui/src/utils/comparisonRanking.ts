@@ -3,6 +3,7 @@ export type Standing = { key: string; name: string; path: string; strength?: num
 export function rankResults(results: any[], folder: string, overall: boolean, rate: boolean): Standing[] {
   const groups = new Map<string, Standing>();
   for (const r of results) {
+    if (r.round?.kind !== 'compare') continue;
     const loras = r.generation?.model?.loras || [];
     // Stacked LoRAs cannot attribute a vote to one checkpoint. Baselines are reference only.
     if (loras.length !== 1) continue;
