@@ -1,0 +1,54 @@
+import { parentFolder, rankResults, Standing } from './comparisonRanking';
+
+export type EvidenceRecord = {
+  path: string;
+  deleted?: boolean;
+  historical?: boolean;
+  round?: { id: string; folder?: string };
+  generation?: {
+    model?: { loras?: { path: string; strength?: number }[] };
+    sample?: { prompt?: string; seed?: number };
+  };
+};
+export const normalPath = (path: string) => path.replace(/\\/g, '/');
+export function candidateKey(path: string, strength: number) {
+  return JSON.stringify([normalPath(path), strength]);
+}
+export function shortCheckpoint(path: string) {
+  const name = path
+    .split(/[\\/]/)
+    .pop()!
+    .replace(/\.safetensors$/, '');
+  const step = name.match(/_(\d+)$/);
+  return step ? `Step ${Number(step[1])}` : name;
+}
+export function studioData(records: EvidenceRecord[], folder: string) {
+  const scoped = records.filter(r => {
+    const loras = r.generation?.model?.loras || [];
+    return (
+      loras.some(l => parentFolder(l.path) === folder) ||
+      (!loras.length && r.round?.folder && normalPath(r.round.folder) === folder)
+    );
+  });
+  const combinations = rankResults(records, folder, false, false);
+  const paths = [...new Set(combinations.map(r => r.path))].sort((a, b) => {
+    const step = (p: string) => Number(p.match(/_(\d+)\.safetensors$/)?.[1] ?? Number.MAX_SAFE_INTEGER);
+    return step(a) - step(b) || a.localeCompare(b);
+  });
+  const strengths = [...new Set(combinations.map(r => r.strength!))].sort((a, b) => a - b);
+  const cells = new Map(combinations.map(r => [r.key, r]));
+  return { scoped, combinations, paths, strengths, cells };
+}
+export function evidenceFor(records: EvidenceRecord[], candidate: Standing | undefined, prompt = '') {
+  if (!candidate) return [];
+  return records.filter(r => {
+    const loras = r.generation?.model?.loras || [];
+    return (
+      !r.deleted &&
+      loras.length === 1 &&
+      normalPath(loras[0].path) === normalPath(candidate.path) &&
+      (candidate.strength === undefined || Number(loras[0].strength ?? 1) === candidate.strength) &&
+      (!prompt || r.generation?.sample?.prompt === prompt)
+    );
+  });
+}

@@ -3,7 +3,7 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@headlessui/react';
-import { ChevronDown, ChevronLeft, ChevronRight, Loader2, OctagonX, Play, Plus, Square, Sparkles, Trash2, X, PanelsTopLeft } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Loader2, OctagonX, Play, Plus, Square, Sparkles, Trash2, X, Trophy, PanelsTopLeft } from 'lucide-react';
 import { openConfirm } from '@/components/ConfirmModal';
 import { TopBar, MainContent } from '@/components/layout';
 import { Checkbox, CreatableSelectInput, NumberInput, SelectInput, SliderInput, TextAreaInput, TextInput } from '@/components/formInputs';
@@ -20,6 +20,9 @@ import { modelArchs, getGenerateDefaults, GenerateDefaults } from '@/app/jobs/ne
 import GenerateFooter from '@/components/generate/GenerateFooter';
 import LoraBrowserModal, { LoraPick } from '@/components/generate/LoraBrowserModal';
 import CompareFolderModal from '@/components/generate/CompareFolderModal';
+import RankingModal from '@/components/generate/RankingModal';
+import { saveComparisonHistory } from '@/utils/comparisonHistory';
+import { parentFolder } from '@/utils/comparisonRanking';
 
 
 interface EngineStatus {
@@ -29,6 +32,8 @@ interface EngineStatus {
 }
 
 interface ResultItem {
+  round?: { id: string; folder: string };
+  historical?: boolean;
   generation?: { model: Record<string, any>; sample: Record<string, any> };
   request_id: string;
   path: string;
@@ -323,6 +328,7 @@ function GeneratePageInner() {
   const [cards, setCards] = useState<{ [key: string]: boolean }>(persisted.cards || {});
   const [loraModalOpen, setLoraModalOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [rankOpen, setRankOpen] = useState(false);
   const [sweepProgress, setSweepProgress] = useState('');
   const [resultMenu, setResultMenu] = useState<{ result: ResultItem; x: number; y: number } | null>(null);
   useEffect(() => {
@@ -368,6 +374,8 @@ function GeneratePageInner() {
   const deleteResults = async (items: ResultItem[]) => {
     const paths = items.map(i => i.path);
     try {
+      // Save evaluation evidence before any file can disappear.
+      await saveComparisonHistory(items);
       await apiClient.post('/api/inference/outputs/delete', { paths });
     } catch (e: any) {
       alert(`Failed to delete: ${e?.response?.data?.error || e?.message || e}`);
@@ -474,7 +482,7 @@ function GeneratePageInner() {
 
   // one consumer for both a fresh /generate response and a /stream/{id}
   // reattach: everything the stage needs comes from the frames themselves
-  const consumeStream = async (res: Response, abort: AbortController) => {
+  const consumeStream = async (res: Response, abort: AbortController, round?: ResultItem['round']) => {
     const finishedResults: ResultItem[] = [];
     let preview: PreviewInfo | null = null;
     let startInfo: { arch: string; prompt: string } = { arch, prompt: sample.prompt || '' };
@@ -529,6 +537,8 @@ function GeneratePageInner() {
           }
           case 'result': {
             const item: ResultItem = {
+              round,
+              historical: false,
               generation,
               request_id: header.request_id,
               path: header.path,
@@ -561,6 +571,8 @@ function GeneratePageInner() {
       setResults(previous => [...finishedResults.filter(item => !previous.some(r => r.path === item.path)), ...previous]);
       setSelected(finishedResults[finishedResults.length - 1]);
       setShowPreview(false);
+      try { await saveComparisonHistory(finishedResults); }
+      catch { throw new Error('Images generated, but ranking records could not be saved. Open Rank to retry importing history before continuing.'); }
     }
   };
 
@@ -602,6 +614,7 @@ function GeneratePageInner() {
       stream: { latents: 'raw', every_n_steps: 1, max_frames: 0 },
     };
     const snapshot = JSON.parse(JSON.stringify(body));
+    const round = { id: crypto.randomUUID(), folder: sweep?.files.length ? parentFolder(sweep.files[0].path) : activeLoras.length === 1 ? parentFolder(activeLoras[0].path) : '' };
     if (sweep && (snapshot.sample.seed == null || Number(snapshot.sample.seed) < 0)) {
       snapshot.sample.seed = crypto.getRandomValues(new Uint32Array(1))[0];
     }
@@ -628,11 +641,12 @@ function GeneratePageInner() {
       if (id) {
         try {
           localStorage.setItem(ACTIVE_REQUEST_KEY, id);
+          localStorage.setItem('aitk_comparison_active_round', JSON.stringify({ requestId: id, round }));
         } catch {
           // storage unavailable
         }
       }
-      await consumeStream(res, abort);
+      await consumeStream(res, abort, round);
       }
     } catch (e: any) {
       if (e?.name !== 'AbortError') setError(e?.message || String(e));
@@ -654,7 +668,9 @@ function GeneratePageInner() {
     try {
       const res = await fetch(proxy(`stream/${id}`), { headers: authHeaders(), signal: abort.signal });
       if (!res.ok) throw new Error(res.status === 404 ? 'previous generation is gone' : `HTTP ${res.status}`);
-      await consumeStream(res, abort);
+      let round: ResultItem['round'];
+      try { const saved = JSON.parse(localStorage.getItem('aitk_comparison_active_round') || 'null'); if (saved?.requestId === id) round = saved.round; } catch {}
+      await consumeStream(res, abort, round);
     } catch (e: any) {
       if (e?.name !== 'AbortError') setError(e?.message || String(e));
     } finally {
@@ -748,6 +764,7 @@ function GeneratePageInner() {
           <h1 className="text-base sm:text-lg">Generate</h1>
         </div>
         <div className="flex-1" />
+        {!ready && <Button onClick={() => setRankOpen(true)} title="Rank survivors — no GPU required" aria-label="Rank survivors" className="p-2 mr-2 rounded border border-amber-400/40 text-amber-200 hover:bg-amber-950/40"><Trophy className="w-5 h-5" /></Button>}
         <div className="flex items-center gap-2 text-xs sm:text-sm">
           {isStopping ? (
             <>
@@ -1149,6 +1166,7 @@ function GeneratePageInner() {
                 </Button>
                 <Button onClick={() => setCompareOpen(true)} disabled={!ready || running || !model.name_or_path}
                   title="Compare folder" aria-label="Compare folder" className="px-3 py-1.5 rounded-md bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white text-sm"><PanelsTopLeft className="w-5 h-5" /></Button>
+                <Button onClick={() => setRankOpen(true)} title="Rank survivors" aria-label="Rank survivors" className="px-3 py-1.5 rounded-md border border-amber-400/40 text-amber-200 hover:bg-amber-950/40"><Trophy className="w-5 h-5" /></Button>
                 {running && (
                   <Button onClick={cancel} className="px-3 py-2 rounded-md bg-gray-700 hover:bg-gray-600 text-white">
                     Cancel
@@ -1175,6 +1193,7 @@ function GeneratePageInner() {
       )}
       {sweepProgress && <div role="status" className="fixed bottom-10 left-4 z-50 max-w-[70vw] truncate rounded bg-gray-950 px-3 py-2 text-sm text-blue-300">Comparison {sweepProgress}</div>}
       <CompareFolderModal isOpen={compareOpen} onClose={() => setCompareOpen(false)} onRun={(files, baseline) => generate({ files, baseline })} />
+      <RankingModal isOpen={rankOpen} onClose={() => setRankOpen(false)} history={results} />
       <LoraBrowserModal isOpen={loraModalOpen} onClose={() => setLoraModalOpen(false)} onPick={addLora} />
     </>
   );
