@@ -8,6 +8,8 @@ export interface Settings {
   TRAINING_FOLDER: string;
   DATASETS_FOLDER: string;
   MODELS_PATH: string;
+  ZIMAGE_TEXT_ENCODER: string;
+  RANKINGS_SEPARATE_ENCODERS: string;
 }
 
 export default function useSettings() {
@@ -16,6 +18,8 @@ export default function useSettings() {
     TRAINING_FOLDER: '',
     DATASETS_FOLDER: '',
     MODELS_PATH: '',
+    ZIMAGE_TEXT_ENCODER: '',
+    RANKINGS_SEPARATE_ENCODERS: 'true',
   });
   const [isSettingsLoaded, setIsLoaded] = useState(false);
   useEffect(() => {
@@ -23,12 +27,13 @@ export default function useSettings() {
       .get('/api/settings')
       .then(res => res.data)
       .then(data => {
-        console.log('Settings:', data);
         setSettings({
           HF_TOKEN: data.HF_TOKEN || '',
           TRAINING_FOLDER: data.TRAINING_FOLDER || '',
           DATASETS_FOLDER: data.DATASETS_FOLDER || '',
           MODELS_PATH: data.MODELS_PATH || '',
+          ZIMAGE_TEXT_ENCODER: data.ZIMAGE_TEXT_ENCODER || '',
+          RANKINGS_SEPARATE_ENCODERS: data.RANKINGS_SEPARATE_ENCODERS === 'false' ? 'false' : 'true',
         });
         setIsLoaded(true);
       })

@@ -16,6 +16,7 @@ async function test(mode, sweep = true) {
   const noop = () => {};
   const ctx = {
     ready: mode !== 'stopped', running: false,
+    apiClient: { get: async () => ({ data: { ZIMAGE_TEXT_ENCODER: 'test-encoder.safetensors' } }) },
     model: { name_or_path: 'base', loras: [{ path: 'old', strength: 0.2 }] },
     arch: 'zimage:turbo', sample: { prompt: 'fixed', seed: -1, width: 768, height: 1024 },
     activeLoras: [{ path: 'old', strength: 0.2 }],
@@ -38,7 +39,7 @@ async function test(mode, sweep = true) {
   if (!sweep) { assert.equal(requests.length, 1); assert.equal(requests[0].model.loras[0].path, 'old'); return; }
   assert.equal(requests.length, 13);
   assert.equal(requests[0].model.loras.length, 0);
-  requests.forEach(r => { assert.equal(r.sample.seed, 123); assert.equal(r.sample.prompt, 'fixed'); });
+  requests.forEach(r => { assert.equal(r.model.te_name_or_path, 'test-encoder.safetensors'); assert.equal(r.sample.seed, 123); assert.equal(r.sample.prompt, 'fixed'); });
   for (let i = 1; i < 13; i++) {
     assert.equal(requests[i].model.loras.length, 1);
     assert.equal(requests[i].model.loras[0].strength, [0.6, 0.8, 1][(i - 1) % 3]);

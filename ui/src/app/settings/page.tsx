@@ -132,6 +132,25 @@ export default function Settings() {
             </div>
           </div>
 
+          <section className="max-w-3xl rounded-xl border border-gray-700 bg-gray-900 p-6 space-y-5">
+            <div>
+              <h2 className="text-lg font-medium">Z-Image · text encoder</h2>
+              <p className="text-sm text-gray-400 mt-1">Used by Generate and Compare. Training jobs are unchanged.</p>
+            </div>
+            <div>
+              <label htmlFor="ZIMAGE_TEXT_ENCODER" className="block text-sm font-medium mb-2">Encoder path</label>
+              <input id="ZIMAGE_TEXT_ENCODER" name="ZIMAGE_TEXT_ENCODER" value={settings.ZIMAGE_TEXT_ENCODER}
+                onChange={handleChange} placeholder="Blank = stock Qwen3 encoder"
+                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-gray-600" />
+              <p className="text-xs text-gray-400 mt-2">Use a compatible Qwen3 checkpoint file or model directory. Leave blank for stock. The next run loads the selected encoder; a comparison keeps the same encoder throughout.</p>
+            </div>
+            <label className="flex items-start gap-3 cursor-pointer border-t border-gray-700 pt-5">
+              <input type="checkbox" className="mt-1 accent-green-400" checked={settings.RANKINGS_SEPARATE_ENCODERS !== 'false'}
+                onChange={e => setSettings(prev => ({ ...prev, RANKINGS_SEPARATE_ENCODERS: String(e.target.checked) }))} />
+              <span><span className="block text-sm font-medium">Keep rankings separate by text encoder</span>
+                <span className="block text-xs text-gray-400 mt-1">Recommended for fair comparisons. Turn off to pool encoder results. Original metadata is always retained.</span></span>
+            </label>
+          </section>
           <button
             type="submit"
             disabled={status === 'saving'}

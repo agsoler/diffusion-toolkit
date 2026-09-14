@@ -1,0 +1,12 @@
+const ts = require('typescript');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const context = { exports: {} };
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/utils/encoderIdentity.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, context);
+const id = context.exports.encoderIdentity;
+const row = path => ({ generation: { model: { te_name_or_path: path } } });
+assert.equal(id(row(undefined)), id(row(null)));
+assert.equal(id(row('D:\\models\\encoder.safetensors')), id(row('D:/models/encoder.safetensors')));
+assert.notEqual(id(row('custom')), id(row(undefined)));
+console.log('PASS encoder identities: legacy stock, path separators, distinct overrides');

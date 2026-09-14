@@ -15,6 +15,7 @@ import {
   studioData,
 } from '@/utils/rankingStudio';
 import './RankingStudio.css';
+import { encoderIdentity } from '@/utils/encoderIdentity';
 
 const views = ['Heatmap', 'Strength curves', 'Evidence board'];
 const colours = ['#c4ed84', '#ac8bbc', '#7eacbf', '#cbaa70', '#e8a38f', '#748899'];
@@ -25,6 +26,8 @@ type Props = { isOpen: boolean; onClose: () => void; history: EvidenceRecord[] }
 
 export default function RankingModal({ isOpen, onClose, history }: Props) {
   const [records, setRecords] = useState<EvidenceRecord[]>([]);
+  const [separateEncoders, setSeparateEncoders] = useState(true);
+  const [encoder, setEncoder] = useState('');
   const [folder, setFolder] = useState('');
   const [view, setView] = useState(0);
   const [overall, setOverall] = useState(false);
@@ -45,7 +48,9 @@ export default function RankingModal({ isOpen, onClose, history }: Props) {
     try {
       await saveComparisonHistory(historyRef.current);
       const { data } = await apiClient.get('/api/comparison-ledger');
+      const { data: settings } = await apiClient.get('/api/settings');
       if (request.current !== id) return;
+      setSeparateEncoders(settings.RANKINGS_SEPARATE_ENCODERS !== 'false');
       setRecords(data.results.filter((r: EvidenceRecord) => r.round?.kind === 'compare'));
       setLoaded(true);
       const latest = historyRef.current.find(r => r.round?.folder || r.generation?.model?.loras?.length === 1);
@@ -77,13 +82,16 @@ export default function RankingModal({ isOpen, onClose, history }: Props) {
   useEffect(() => {
     setPrompt('');
     setVisibleImages(12);
-  }, [folder, selectedKey]);
+  }, [folder, selectedKey, encoder, separateEncoders]);
   const folders = useMemo(
     () => [...new Set(records.flatMap(r => (r.generation?.model?.loras || []).map(l => parentFolder(l.path))))].sort(),
     [records],
   );
-  const data = useMemo(() => studioData(records, folder), [records, folder]);
-  const rows = useMemo(() => rankResults(records, folder, overall, rate), [records, folder, overall, rate]);
+  const encoders = [...new Set(records.filter(r => r.generation?.model?.loras?.some(l => parentFolder(l.path) === folder)).map(encoderIdentity))].sort();
+  const activeEncoder = encoders.includes(encoder) ? encoder : encoders[0] || '';
+  const filteredRecords = useMemo(() => separateEncoders ? records.filter(r => encoderIdentity(r) === activeEncoder) : records, [records, separateEncoders, activeEncoder]);
+  const data = useMemo(() => studioData(filteredRecords, folder), [filteredRecords, folder]);
+  const rows = useMemo(() => rankResults(filteredRecords, folder, overall, rate), [filteredRecords, folder, overall, rate]);
   const selected = data.cells.get(selectedKey) || data.combinations[0];
   const select = (r: Standing) => {
     if (r.strength === undefined) {
@@ -269,7 +277,15 @@ export default function RankingModal({ isOpen, onClose, history }: Props) {
                 {error}
               </p>
             )}
-            <p className="studio-muted text-xs mb-4">Only Compare folder runs count. Manual generations are excluded.</p>
+            <div className="studio-muted text-xs mb-4 flex items-center gap-4">
+              <span>Only Compare folder runs count. Manual generations are excluded.</span>
+              {separateEncoders ? <label className="flex items-center gap-2">Text encoder
+                <select aria-label="Ranking text encoder" value={activeEncoder} onChange={e => setEncoder(e.target.value)} className="studio-select max-w-[480px]">
+                  {!encoders.length && <option value="">No encoder results</option>}
+                  {encoders.map(value => <option key={value} value={value}>{value.split('/').pop()}</option>)}
+                </select>
+              </label> : <span>All text encoders combined · change in Settings</span>}
+            </div>
             {new Set(rows.map(r => r.total)).size > 1 && (
               <p className="studio-muted text-xs mb-5">
                 Unequal exposure: compare attempt counts. More trials can produce more survivors without a higher

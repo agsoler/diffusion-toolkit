@@ -222,8 +222,13 @@ class ZImageModel(BaseModel):
 
         self.print_and_status_update("Text Encoder")
         tokenizer = Qwen3TextEncoder.load_tokenizer(base_model_path)
-        text_encoder = Qwen3TextEncoder.load(
-            base_model_path, **self.component_load_kwargs("te")
+        from toolkit.models.v2.text_encoders.qwen3 import Qwen3SingleFileEncoder
+        encoder_class = Qwen3SingleFileEncoder if (self.model_config.te_name_or_path or "").endswith(".safetensors") else Qwen3TextEncoder
+        encoder_kwargs = self.component_load_kwargs("te")
+        text_encoder = encoder_class.load(
+            self.model_config.te_name_or_path or base_model_path,
+            config_path=base_model_path,
+            **encoder_kwargs
         )
 
         self.print_and_status_update("Loading VAE")

@@ -11,6 +11,8 @@ export async function GET() {
       return acc;
     }, {});
     // if TRAINING_FOLDER is not set, use default
+    settingsObject.ZIMAGE_TEXT_ENCODER ??= '';
+    settingsObject.RANKINGS_SEPARATE_ENCODERS ??= 'true';
     if (!settingsObject.TRAINING_FOLDER || settingsObject.TRAINING_FOLDER === '') {
       settingsObject.TRAINING_FOLDER = defaultTrainFolder;
     }
@@ -38,6 +40,9 @@ export async function POST(request: Request) {
 
     // Upsert both settings
     await Promise.all([
+      ...['ZIMAGE_TEXT_ENCODER', 'RANKINGS_SEPARATE_ENCODERS'].filter(key => typeof body[key] === 'string').map(key =>
+        prisma.settings.upsert({ where: { key }, update: { value: body[key].trim() }, create: { key, value: body[key].trim() } }),
+      ),
       prisma.settings.upsert({
         where: { key: 'HF_TOKEN' },
         update: { value: HF_TOKEN },

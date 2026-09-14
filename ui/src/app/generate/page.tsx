@@ -61,6 +61,7 @@ function resultDetails(result: ResultItem): string {
   const g = result.generation;
   return [
     `Model: ${g?.model.name_or_path || result.arch}`,
+    `Text encoder: ${g?.model.te_name_or_path || 'Stock encoder'}`,
     loraSummary(result),
     ...(g?.model.loras || []).map((l: { path: string; strength?: number }) => `${l.path} (strength ${l.strength ?? 1})`),
     `Seed: ${result.seed} · ${result.width} × ${result.height} · Steps: ${result.steps ?? g?.sample.num_inference_steps ?? 'unknown'} · Guidance: ${g?.sample.guidance_scale ?? 'unknown'}`,
@@ -624,6 +625,10 @@ function GeneratePageInner() {
     ] : [{ label: '', loras: snapshot.model.loras }];
     try {
       for (let index = 0; index < batches.length; index++) {
+      if (index === 0 && arch.startsWith('zimage')) {
+        const { data } = await apiClient.get('/api/settings');
+        snapshot.model.te_name_or_path = data.ZIMAGE_TEXT_ENCODER?.trim() || null;
+      }
       if (abort.signal.aborted) break;
       const batch = batches[index];
       setSweepProgress(sweep ? `${index + 1}/${batches.length} · ${batch.label}` : '');

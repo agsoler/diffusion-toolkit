@@ -6,7 +6,7 @@ export type EvidenceRecord = {
   historical?: boolean;
   round?: { id: string; folder?: string; kind?: 'compare' | 'manual' };
   generation?: {
-    model?: { loras?: { path: string; strength?: number }[] };
+    model?: { te_name_or_path?: string; loras?: { path: string; strength?: number }[] };
     sample?: { prompt?: string; seed?: number };
   };
 };
