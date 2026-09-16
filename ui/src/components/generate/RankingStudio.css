@@ -1,4 +1,5 @@
 .ranking-studio {
+  color-scheme: dark;
   --paper: #171b19;
   --ink: #ecefe5;
   --muted: #9aa69d;
@@ -31,6 +32,7 @@
   color: var(--paper);
 }
 .ranking-studio.variant-C {
+  color-scheme: light;
   --paper: #efe9dc;
   --ink: #292d29;
   --muted: #737b70;
