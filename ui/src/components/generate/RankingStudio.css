@@ -30,13 +30,6 @@
   background: var(--accent);
   color: var(--paper);
 }
-.ranking-studio.variant-B {
-  --paper: #122029;
-  --ink: #e0eaf1;
-  --muted: #90a8b6;
-  --line: #304451;
-  --accent: #afd2e4;
-}
 .ranking-studio.variant-C {
   --paper: #efe9dc;
   --ink: #292d29;
@@ -127,27 +120,11 @@
   height: 100%;
   background: var(--accent);
 }
-.studio-checkpoint {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  width: 100%;
-  padding: 13px 10px;
-  border-bottom: 1px solid var(--line);
-  font-size: 13px;
-}
-.studio-checkpoint.chosen {
-  background: #273843;
-}
 .studio-pill {
   padding: 8px 18px;
   border: 1px solid var(--line);
   border-radius: 30px;
   font-size: 12px;
-}
-.studio-pill.chosen {
-  background: var(--accent);
-  color: var(--paper);
 }
 .studio-print {
   padding: 10px;

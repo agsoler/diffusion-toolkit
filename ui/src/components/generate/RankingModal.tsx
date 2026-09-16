@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
-import { ArrowLeft, ArrowRight, ArrowUpRight, Grid2X2, LineChart, Images, RefreshCw, X, List } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUpRight, Grid2X2, Images, RefreshCw, X, List } from 'lucide-react';
 import RoundsView from './RoundsView';
 import { comparisonFolder } from '@/utils/comparisonLoras';
 import { apiClient } from '@/utils/api';
@@ -19,8 +19,7 @@ import {
 import './RankingStudio.css';
 import { encoderIdentity } from '@/utils/encoderIdentity';
 
-const views = ['Heatmap', 'Strength curves', 'Evidence board', 'Rounds'];
-const colours = ['#c4ed84', '#ac8bbc', '#7eacbf', '#cbaa70', '#e8a38f', '#748899'];
+const views = ['Heatmap', 'Evidence board', 'Rounds'];
 const percentage = (r: Standing) => Math.round((100 * r.kept) / r.total);
 const label = (r: Standing) =>
   `${shortCheckpoint(r.path)}${r.strength === undefined ? ' · all strengths' : ` · ${r.strength}`}`;
@@ -166,7 +165,7 @@ export default function RankingModal({ isOpen, onClose, history, running = false
       </section>
     );
   }
-  function Evidence({ wide = false }: { wide?: boolean }) {
+  function Evidence() {
     return (
       <section className="studio-evidence">
         <div className="studio-kicker">Inspect the evidence</div>
@@ -176,8 +175,8 @@ export default function RankingModal({ isOpen, onClose, history, running = false
             ? `${selected.kept} survivors / ${selected.total} attempts. Actual images from this combination.`
             : ''}
         </p>
-        <div className={`grid gap-2 ${wide ? 'grid-cols-6' : 'grid-cols-3'}`}>
-          {evidence.slice(0, wide ? 6 : 3).map(r => (
+        <div className="grid gap-2 grid-cols-3">
+          {evidence.slice(0, 3).map(r => (
             <a
               key={r.path}
               href={`/api/files/${encodeFilePathForUrl(r.path)}`}
@@ -213,7 +212,7 @@ export default function RankingModal({ isOpen, onClose, history, running = false
             }
           }}
         >
-          <div className={`ranking-studio variant-${['A', 'B', 'C'][view]}`}>
+          <div className={`ranking-studio variant-${['A', 'C', 'A'][view]}`}>
             <button
               onClick={onClose}
               aria-label="Close rankings and return to Generate"
@@ -242,9 +241,7 @@ export default function RankingModal({ isOpen, onClose, history, running = false
               <DialogTitle as="h1">
                 {view === 0
                   ? 'The sweet spot, at a glance.'
-                  : view === 1
-                    ? 'A little strength. A lot of difference.'
-                    : view === 2 ? 'The images have the last word.' : 'Rounds'}
+                  : view === 1 ? 'The images have the last word.' : 'Rounds'}
               </DialogTitle>
               <div className="flex gap-5 items-end mt-6">
                 <label className="studio-kicker flex-1 min-w-0">
@@ -266,11 +263,11 @@ export default function RankingModal({ isOpen, onClose, history, running = false
                     ))}
                   </select>
                 </label>
-                <label className={view === 3 ? 'hidden' : 'studio-kicker'}>
+                <label className={view === 2 ? 'hidden' : 'studio-kicker'}>
                   Leaderboard grouping
                   <select
                     aria-label="Leaderboard grouping"
-                    hidden={view === 3}
+                    hidden={view === 2}
                     value={overall ? 'overall' : 'combination'}
                     onChange={e => setOverall(e.target.value === 'overall')}
                     className="studio-select block mt-2 text-sm normal-case tracking-normal"
@@ -279,11 +276,11 @@ export default function RankingModal({ isOpen, onClose, history, running = false
                     <option value="overall">Checkpoint overall</option>
                   </select>
                 </label>
-                <label className={view === 3 ? 'hidden' : 'studio-kicker'}>
+                <label className={view === 2 ? 'hidden' : 'studio-kicker'}>
                   Rank by
                   <select
                     aria-label="Rank by"
-                    hidden={view === 3}
+                    hidden={view === 2}
                     value={rate ? 'rate' : 'survivors'}
                     onChange={e => setRate(e.target.value === 'rate')}
                     className="studio-select block mt-2 text-sm normal-case tracking-normal"
@@ -295,7 +292,7 @@ export default function RankingModal({ isOpen, onClose, history, running = false
               </div>
               <p className="studio-muted text-xs mt-4">
                 {rounds} tracked rounds · {data.scoped.length} generated · {kept} surviving ·{' '}
-                {data.scoped.length - kept} rejected.{view !== 3 && ' Keep comparing; there is no fixed trial count.'}
+                {data.scoped.length - kept} rejected.{view !== 2 && ' Keep comparing; there is no fixed trial count.'}
               </p>
             </header>
             {error && (
@@ -303,17 +300,17 @@ export default function RankingModal({ isOpen, onClose, history, running = false
                 {error}
               </p>
             )}
-            {view !== 3 && <div className="studio-muted text-xs mb-4 flex items-center gap-4">
-              {view !== 3 && <span>Only Compare folder runs count. Manual generations are excluded.</span>}
+            {view !== 2 && <div className="studio-muted text-xs mb-4 flex items-center gap-4">
+              {view !== 2 && <span>Only Compare folder runs count. Manual generations are excluded.</span>}
               {encoderControl}
             </div>}
-            {view !== 3 && new Set(rows.map(r => r.total)).size > 1 && (
+            {view !== 2 && new Set(rows.map(r => r.total)).size > 1 && (
               <p className="studio-muted text-xs mb-5">
                 Unequal exposure: compare attempt counts. More trials can produce more survivors without a higher
                 survival rate.
               </p>
             )}
-            {view === 3 ? <RoundsView records={data.scoped} folder={folder} encoder={separateEncoders ? activeEncoder : null} disabled={loading || running} onDelete={deleteRounds} encoderControl={encoderControl}/> : !rows.length ? (
+            {view === 2 ? <RoundsView records={data.scoped} folder={folder} encoder={separateEncoders ? activeEncoder : null} disabled={loading || running} onDelete={deleteRounds} encoderControl={encoderControl}/> : !rows.length ? (
               <p className="studio-muted py-16 text-center">
                 {loading
                   ? 'Loading comparisons…'
@@ -401,154 +398,9 @@ export default function RankingModal({ isOpen, onClose, history, running = false
                 )}
                 {view === 1 && (
                   <>
-                    <div className="grid grid-cols-[260px_minmax(0,1fr)] gap-10">
-                      <aside>
-                        <div className="studio-kicker">02 / Strength sensitivity</div>
-                        <h2 className="mb-6">Find its range.</h2>
-                        <div className="max-h-[440px] overflow-y-auto">
-                          {data.paths.map((path, i) => (
-                            <button
-                              key={path}
-                              title={path}
-                              className={`studio-checkpoint ${selected?.path === path ? 'chosen' : ''}`}
-                              onClick={() =>
-                                select(
-                                  data.combinations.find(c => c.path === path && c.strength === selected?.strength) ||
-                                    data.combinations.find(c => c.path === path)!,
-                                )
-                              }
-                            >
-                              <span
-                                className="w-2 h-2 shrink-0 rounded-full"
-                                style={{ background: colours[i % colours.length] }}
-                              />
-                              <span className="truncate">{shortCheckpoint(path)}</span>
-                            </button>
-                          ))}
-                        </div>
-                        <p className="studio-muted text-xs mt-6">
-                          Straight lines connect measured strengths. No smoothed curve or invented optimum. Missing
-                          settings break the line.
-                        </p>
-                      </aside>
-                      <section>
-                        <div className="studio-kicker">Survival rate by LoRA strength</div>
-                        <svg
-                          viewBox="0 0 820 360"
-                          className="w-full mt-4"
-                          role="img"
-                          aria-label="Measured survival rates by checkpoint and strength"
-                        >
-                          {[0, 25, 50, 75, 100].map(v => (
-                            <g key={v}>
-                              <line x1="55" x2="775" y1={310 - v * 2.6} y2={310 - v * 2.6} stroke="var(--line)" />
-                              <text x="40" y={315 - v * 2.6} fill="var(--muted)" textAnchor="end" fontSize="12">
-                                {v}%
-                              </text>
-                            </g>
-                          ))}
-                          {data.strengths.map(s => {
-                            const min = data.strengths[0],
-                              max = data.strengths.at(-1)!;
-                            const x = max === min ? 415 : 90 + ((s - min) / (max - min)) * 650;
-                            return (
-                              <text key={s} x={x} y="342" textAnchor="middle" fill="var(--ink)" fontSize="14">
-                                {s}
-                              </text>
-                            );
-                          })}
-                          {[...data.paths].sort((a, b) => Number(a === selected?.path) - Number(b === selected?.path)).map(path => {
-                            const i = data.paths.indexOf(path);
-                            const min = data.strengths[0],
-                              max = data.strengths.at(-1)!;
-                            const x = (s: number) => (max === min ? 415 : 90 + ((s - min) / (max - min)) * 650);
-                            return (
-                              <g key={path} opacity={selected?.path === path ? 1 : 0.3}>
-                                {data.strengths.map((s, col) => {
-                                  const cell = data.cells.get(candidateKey(path, s));
-                                  if (!cell) return null;
-                                  const previous = col
-                                    ? data.cells.get(candidateKey(path, data.strengths[col - 1]))
-                                    : undefined;
-                                  return (
-                                    <g key={s}>
-                                      {previous && (
-                                        <line
-                                          x1={x(previous.strength!)}
-                                          y1={310 - percentage(previous) * 2.6}
-                                          x2={x(s)}
-                                          y2={310 - percentage(cell) * 2.6}
-                                          stroke={colours[i % colours.length]}
-                                          strokeWidth="3"
-                                        />
-                                      )}
-                                      <g
-                                        role="button"
-                                        tabIndex={0}
-                                        aria-label={`${label(cell)}: ${cell.kept}/${cell.total} surviving`}
-                                        onClick={() => select(cell)}
-                                        onKeyDown={e => {
-                                          if (e.key === 'Enter' || e.key === ' ') {
-                                            e.preventDefault();
-                                            select(cell);
-                                          }
-                                        }}
-                                        style={{ cursor: 'pointer' }}
-                                      >
-                                        <circle
-                                          cx={x(s)}
-                                          cy={310 - percentage(cell) * 2.6}
-                                          r="8"
-                                          fill={colours[i % colours.length]}
-                                        />
-                                        <title>
-                                          {label(cell)}: {cell.kept}/{cell.total}
-                                        </title>
-                                        {selected?.path === path && (
-                                          <text
-                                            x={x(s)}
-                                            y={290 - percentage(cell) * 2.6}
-                                            fill="var(--ink)"
-                                            textAnchor="middle"
-                                            fontSize="14"
-                                          >
-                                            {cell.kept}/{cell.total}
-                                          </text>
-                                        )}
-                                      </g>
-                                    </g>
-                                  );
-                                })}
-                              </g>
-                            );
-                          })}
-                        </svg>
-                        <div className="flex gap-3 justify-center flex-wrap">
-                          {data.combinations
-                            .filter(c => c.path === selected?.path)
-                            .sort((a, b) => a.strength! - b.strength!)
-                            .map(c => (
-                              <button
-                                key={c.key}
-                                className={`studio-pill ${c.key === selected?.key ? 'chosen' : ''}`}
-                                onClick={() => select(c)}
-                              >
-                                Inspect {c.strength}
-                              </button>
-                            ))}
-                        </div>
-                      </section>
-                    </div>
-                    <div className="mt-8 pt-7 border-t border-[var(--line)]">
-                      <Evidence wide />
-                    </div>
-                  </>
-                )}
-                {view === 2 && (
-                  <>
                     <div className="flex justify-between items-end mb-7">
                       <div>
-                        <div className="studio-kicker">03 / The contact sheet</div>
+                        <div className="studio-kicker">02 / The contact sheet</div>
                         <h2>Show me what survived.</h2>
                       </div>
                       <label className="text-xs studio-muted w-[480px] min-w-0 shrink-0">
@@ -627,7 +479,7 @@ export default function RankingModal({ isOpen, onClose, history, running = false
                 )}
               </>
             )}
-            <p hidden={view === 3} className="studio-muted text-xs mt-8 border-t border-[var(--line)] pt-4">
+            <p hidden={view === 2} className="studio-muted text-xs mt-8 border-t border-[var(--line)] pt-4">
               Ties stay tied, including the top three. Baselines are included in summary counts but do not compete;
               supporting LoRAs do not compete. Unattributed legacy stacks are excluded. Images still present are votes—not objective quality scores.
               Close, cull, compare and reopen to update.
@@ -639,7 +491,7 @@ export default function RankingModal({ isOpen, onClose, history, running = false
               <button onClick={() => cycle(-1)} aria-label="Previous visualisation">
                 <ArrowLeft size={18} />
               </button>
-              {[Grid2X2, LineChart, Images, List].map((Icon, i) => (
+              {[Grid2X2, Images, List].map((Icon, i) => (
                 <button
                   key={views[i]}
                   onClick={() => setView(i)}
