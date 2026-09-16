@@ -336,7 +336,7 @@ export default function RankingModal({ isOpen, onClose, history, running = false
                         <div
                           className="grid gap-2"
                           style={{
-                            gridTemplateColumns: `minmax(130px, 1fr) repeat(${data.strengths.length}, minmax(105px, 1fr))`,
+                            gridTemplateColumns: `110px repeat(${data.strengths.length}, minmax(105px, 1fr))`,
                           }}
                         >
                           <span className="studio-kicker self-end pb-3">Checkpoint</span>
