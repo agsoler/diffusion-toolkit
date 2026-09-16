@@ -332,7 +332,7 @@ export default function RankingModal({ isOpen, onClose, history, running = false
                           Colour = survival rate
                         </span>
                       </div>
-                      <div className="overflow-auto max-h-[650px] p-1 pr-5 [scrollbar-gutter:stable]">
+                      <div className="overflow-auto max-h-[650px] p-1 pr-9 [scrollbar-gutter:stable]">
                         <div
                           className="grid gap-2"
                           style={{
