@@ -45,6 +45,8 @@ function argValue(name: string, fallback: number): number {
 }
 
 const PUBLIC_PORT = argValue('--port', isDev ? 3000 : 8675);
+// Keep the public listener local by default. Set this explicitly to expose the UI.
+const PUBLIC_HOST = process.env.AI_TOOLKIT_UI_HOST?.trim() || '127.0.0.1';
 const UPSTREAM_HOST = '127.0.0.1';
 
 const numWorkers = (() => {
@@ -514,7 +516,7 @@ function startServer(publicPort: number, upstreamPort: number): void {
   // request timeout would kill them mid-transfer.
   server.requestTimeout = 0;
 
-  server.listen(publicPort);
+  server.listen(publicPort, PUBLIC_HOST);
 }
 
 // ---------------------------------------------------------------------------
@@ -591,7 +593,7 @@ async function primaryMain(): Promise<void> {
     shutdown(1);
   });
 
-  console.log(`AI Toolkit UI: http://localhost:${PUBLIC_PORT} (${numWorkers} file server worker${numWorkers === 1 ? '' : 's'})`);
+  console.log(`AI Toolkit UI listening on ${PUBLIC_HOST}:${PUBLIC_PORT} (${numWorkers} file server worker${numWorkers === 1 ? '' : 's'})`);
 
   if (numWorkers <= 1) {
     startServer(PUBLIC_PORT, upstreamPort);
