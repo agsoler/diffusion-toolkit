@@ -46,8 +46,8 @@ The development worktree is not automatically an isolated runtime. Before starti
 ## Migration status
 
 - Both worktrees and remotes are configured.
-- The installed integration checkout remains on its original upstream base; creating the branch did not upgrade the app.
-- Production improvements are preserved in integration commit `5091da5`. The installed checkout still has local-only launch/server/prototype customisations; these are deliberately not part of the published production features.
+- The installed integration checkout includes upstream `ecee894` through merge commit `27e83cb` (2026-09-29). Keep `main` as the clean upstream mirror; sync upstream changes through a tested branch before advancing `integration`.
+- Production improvements remain on `integration`. The configurable UI bind address and local setup scripts are committed; runtime data and the throwaway ranking prototype are not in source control.
 - Focused branches have been reconstructed on the clean upstream `main` base `87f8090`:
   - `feature/generation-settings`: metadata/tooltips and restoring settings; base `main`.
   - `feature/folder-comparison`: checkpoint/strength sweeps; base `feature/generation-settings`.

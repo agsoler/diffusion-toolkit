@@ -11,7 +11,11 @@ The development worktree currently shares the installed UI's `node_modules` thro
 
 `5091da5` on integration preserves all production UI improvements together on the installed upstream base `881143c`. It excludes machine-local launch scripts, the localhost binding change, databases, models, generated data and the throwaway ranking prototype. The prototype route import/gate was removed from production source; prototype files remain locally backed up.
 
-The focused branches below were reconstructed on upstream `87f8090`; integration was not rebased or silently upgraded. Their different ancestry is intentional. Do not force-push integration or merge reconstructed commits merely to add features already present in the baseline.
+The focused branches below were reconstructed on upstream `87f8090`; their different ancestry from the preserved baseline is intentional. Do not force-push integration or merge reconstructed commits merely to add features already present in the baseline.
+
+## Current upstream sync
+
+On 2026-09-29, fork `main` fast-forwarded to upstream `ecee894`. Upstream was merged into `integration` through tested sync branch `chore/sync-upstream-2026-09` (merge commit `27e83cb`), not rebased. The only textual conflict was in the Generate page; its comparison controls and upstream UI changes were retained. The configurable UI bind address and local setup scripts were committed before this sync. Treat the branch bases in the table below as historical: verify their full diff against current upstream before using any of them for an upstream PR.
 
 ## Focused commits and dependencies
 
