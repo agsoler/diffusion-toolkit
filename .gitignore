@@ -187,6 +187,9 @@ cython_debug/
 aitk_db.db
 aitk_db.db-wal
 aitk_db.db-shm
+/comparison_ledger.db
+/comparison_ledger.db-wal
+/comparison_ledger.db-shm
 /notes.md
 /data
 .claude
