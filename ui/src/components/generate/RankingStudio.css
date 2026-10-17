@@ -30,20 +30,6 @@
   background: var(--accent);
   color: var(--paper);
 }
-.ranking-studio.variant-B {
-  --paper: #122029;
-  --ink: #e0eaf1;
-  --muted: #90a8b6;
-  --line: #304451;
-  --accent: #afd2e4;
-}
-.ranking-studio.variant-C {
-  --paper: #efe9dc;
-  --ink: #292d29;
-  --muted: #737b70;
-  --line: #ccc9bb;
-  --accent: #596e47;
-}
 .ranking-studio h1,
 .ranking-studio h2,
 .ranking-studio h3 {
@@ -149,19 +135,6 @@
   background: var(--accent);
   color: var(--paper);
 }
-.studio-print {
-  padding: 10px;
-  background: #faf7ef;
-  box-shadow: 0 2px 5px #26221a15;
-  outline: 1px solid #d5d0c4;
-  transition: transform 0.15s;
-}
-.studio-print.chosen {
-  outline: 3px solid var(--accent);
-}
-.studio-print:hover {
-  transform: translateY(-3px);
-}
 .studio-select {
   padding: 8px;
   background: var(--paper);
@@ -182,9 +155,6 @@
 .studio-cell:disabled {
   opacity: 0.4;
   cursor: default;
-}
-.studio-print {
-  color: #292d29;
 }
 .studio-evidence img {
   background: var(--line);
