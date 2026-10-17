@@ -55,7 +55,7 @@ The development worktree is not automatically an isolated runtime. Before starti
   - `feature/themed-scrollbars`: global scrollbar styling; independent base `main`.
 - See `docs/FORK-WORKFLOW.md` for PR sequencing and the relationship to the integration baseline. Do not merge these reconstructed branches into integration just to duplicate changes already preserved there.
 - Before branching from integration for dependent work, ensure the required customisations have been captured in commits. A new branch/worktree does not inherit another worktree's uncommitted files.
-- Existing improvements include generation metadata, sending image settings back to Generate, folder comparison sweeps, survivor tracking and three ranking views, plus theme-aware scrollbars.
+- Existing improvements include generation metadata, sending image settings back to Generate, folder comparison sweeps, survivor tracking and Heatmap and Rounds ranking views, plus theme-aware scrollbars.
 - The comparison/ranking workflow is scoped to the selected LoRA output folder, supports repeated prompts without a fixed trial count, and ranks surviving images by checkpoint or checkpoint-strength combination.
 - A verified pre-restructuring backup is at `D:\Apps\LORA-Training-Backups\2026-09-14-integration`. It includes changed source, Git metadata, configuration and integrity-checked database backups, not a full copy of models/datasets.
 
