@@ -39,22 +39,23 @@ function nodes(node) {
   return [node, ...nodes(node.props?.children)];
 }
 function find(tree, predicate) { return nodes(tree).find(predicate); }
-const titles = ['The sweet spot, at a glance.', 'The images have the last word.', 'Rounds'];
-const labels = ['Heatmap', 'Evidence board', 'Rounds'];
-for (let i = 0; i < 3; i++) {
+const titles = ['The sweet spot, at a glance.', 'Rounds'];
+const labels = ['Heatmap', 'Rounds'];
+for (let i = 0; i < 2; i++) {
   const tree = render();
   assert.equal(view, i);
   assert.equal(find(tree, n => n.type === 'DialogTitle').props.children, titles[i]);
-  assert.equal(find(tree, n => n.props?.['aria-label'] === 'Rank by').props.hidden, i === 2);
-  assert.equal(Boolean(find(tree, n => n.type === 'RoundsView')), i === 2);
+  assert.equal(find(tree, n => n.props?.['aria-label'] === 'Rank by').props.hidden, i === 1);
+  assert.equal(Boolean(find(tree, n => n.type === 'RoundsView')), i === 1);
   assert.equal(find(tree, n => n.props?.title === labels[i]).props['aria-pressed'], true);
   find(tree, n => n.props?.['aria-label'] === 'Next visualisation').props.onClick();
 }
 assert.equal(view, 0);
 find(render(), n => n.props?.['aria-label'] === 'Previous visualisation').props.onClick();
-assert.equal(view, 2);
-find(render(), n => n.props?.title === 'Evidence board').props.onClick();
 assert.equal(view, 1);
-assert.match(find(render(), n => n.props?.className?.startsWith('ranking-studio')).props.className, /variant-C/);
+find(render(), n => n.props?.title === 'Rounds').props.onClick();
+assert.equal(view, 1);
+assert.match(find(render(), n => n.props?.className?.startsWith('ranking-studio')).props.className, /variant-A/);
+assert.doesNotMatch(source, /Evidence board|The images have the last word|contact sheet/i);
 assert.doesNotMatch(source, /Strength curves|LineChart|const colours|Evidence wide|studio-checkpoint/);
-console.log('PASS ranking views: three tabs, direct selection, forward/back wrap, titles, evidence theme, round controls');
+console.log('PASS ranking views: two tabs, direct selection, forward/back wrap, titles, round controls');
