@@ -22,7 +22,7 @@ The focused branches below were reconstructed on upstream `87f8090`; integration
 | `feature/survivor-ranking` | `99bf395` | `feature/folder-comparison` |
 | `feature/themed-scrollbars` | `31df20a` | `main` |
 
-Generation settings includes engine-confirmed metadata, informative result tooltips and the right-click action to restore settings. Folder comparison adds serial fixed-strength sweeps, consistent seeds, cancellation and completion handling. Ranking adds persistent attempts/survivors, filtering and three evidence views. Scrollbars is independent.
+Generation settings includes engine-confirmed metadata, informative result tooltips and the right-click action to restore settings. Folder comparison adds serial fixed-strength sweeps, consistent seeds, cancellation and completion handling. Ranking adds persistent attempts/survivors and filtering for reviewing surviving images. Scrollbars is independent.
 
 For upstream submissions, metadata and scrollbars can be reviewed independently. Comparison depends on metadata; ranking depends on comparison. A PR to upstream main from a dependent branch includes its unmerged prerequisites. Use stacked PRs within the fork for focused review, or submit upstream sequentially after prerequisites land and adjust the remaining branch base deliberately.
 
