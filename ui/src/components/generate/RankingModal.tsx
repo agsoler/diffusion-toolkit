@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
-import { ArrowLeft, ArrowRight, ArrowUpRight, Grid2X2, LineChart, Images, RefreshCw, X, List } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUpRight, Grid2X2, LineChart, RefreshCw, X, List } from 'lucide-react';
 import RoundsView from './RoundsView';
 import { comparisonFolder } from '@/utils/comparisonLoras';
 import { apiClient } from '@/utils/api';
@@ -19,7 +19,7 @@ import {
 import './RankingStudio.css';
 import { encoderIdentity } from '@/utils/encoderIdentity';
 
-const views = ['Heatmap', 'Strength curves', 'Evidence board', 'Rounds'];
+const views = ['Heatmap', 'Strength curves', 'Rounds'];
 const colours = ['#c4ed84', '#ac8bbc', '#7eacbf', '#cbaa70', '#e8a38f', '#748899'];
 const percentage = (r: Standing) => Math.round((100 * r.kept) / r.total);
 const label = (r: Standing) =>
@@ -35,8 +35,6 @@ export default function RankingModal({ isOpen, onClose, history, running = false
   const [overall, setOverall] = useState(false);
   const [rate, setRate] = useState(false);
   const [selectedKey, setSelectedKey] = useState('');
-  const [prompt, setPrompt] = useState('');
-  const [visibleImages, setVisibleImages] = useState(12);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -83,10 +81,6 @@ export default function RankingModal({ isOpen, onClose, history, running = false
       request.current++;
     };
   }, [isOpen]);
-  useEffect(() => {
-    setPrompt('');
-    setVisibleImages(12);
-  }, [folder, selectedKey, encoder, separateEncoders]);
   const folders = useMemo(
     () => [...new Set(records.map(comparisonFolder).filter(Boolean))].sort(),
     [records],
@@ -110,8 +104,6 @@ export default function RankingModal({ isOpen, onClose, history, running = false
     } else setSelectedKey(r.key);
   };
   const evidence = evidenceFor(data.scoped, selected);
-  const prompts = [...new Set(evidence.map(r => r.generation?.sample?.prompt || '').filter(Boolean))];
-  const shownEvidence = evidenceFor(data.scoped, selected, prompt);
   const rounds = new Set(data.scoped.flatMap(r => (r.round?.id ? [r.round.id] : []))).size;
   const kept = data.scoped.filter(r => !r.deleted).length;
   const cycle = (direction: number) => setView(v => (v + direction + views.length) % views.length);
@@ -213,7 +205,7 @@ export default function RankingModal({ isOpen, onClose, history, running = false
             }
           }}
         >
-          <div className={`ranking-studio variant-${['A', 'B', 'C'][view]}`}>
+          <div className={`ranking-studio variant-${['A', 'B'][view]}`}>
             <button
               onClick={onClose}
               aria-label="Close rankings and return to Generate"
@@ -240,11 +232,7 @@ export default function RankingModal({ isOpen, onClose, history, running = false
             </div>
             <header className="py-7 border-b border-[var(--line)] mb-6">
               <DialogTitle as="h1">
-                {view === 0
-                  ? 'The sweet spot, at a glance.'
-                  : view === 1
-                    ? 'A little strength. A lot of difference.'
-                    : view === 2 ? 'The images have the last word.' : 'Rounds'}
+                {view === 0 ? 'The sweet spot, at a glance.' : view === 1 ? 'A little strength. A lot of difference.' : 'Rounds'}
               </DialogTitle>
               <div className="flex gap-5 items-end mt-6">
                 <label className="studio-kicker flex-1 min-w-0">
@@ -266,11 +254,11 @@ export default function RankingModal({ isOpen, onClose, history, running = false
                     ))}
                   </select>
                 </label>
-                <label className={view === 3 ? 'hidden' : 'studio-kicker'}>
+                <label className={view === 2 ? 'hidden' : 'studio-kicker'}>
                   Leaderboard grouping
                   <select
                     aria-label="Leaderboard grouping"
-                    hidden={view === 3}
+                    hidden={view === 2}
                     value={overall ? 'overall' : 'combination'}
                     onChange={e => setOverall(e.target.value === 'overall')}
                     className="studio-select block mt-2 text-sm normal-case tracking-normal"
@@ -279,11 +267,11 @@ export default function RankingModal({ isOpen, onClose, history, running = false
                     <option value="overall">Checkpoint overall</option>
                   </select>
                 </label>
-                <label className={view === 3 ? 'hidden' : 'studio-kicker'}>
+                <label className={view === 2 ? 'hidden' : 'studio-kicker'}>
                   Rank by
                   <select
                     aria-label="Rank by"
-                    hidden={view === 3}
+                    hidden={view === 2}
                     value={rate ? 'rate' : 'survivors'}
                     onChange={e => setRate(e.target.value === 'rate')}
                     className="studio-select block mt-2 text-sm normal-case tracking-normal"
@@ -295,7 +283,7 @@ export default function RankingModal({ isOpen, onClose, history, running = false
               </div>
               <p className="studio-muted text-xs mt-4">
                 {rounds} tracked rounds · {data.scoped.length} generated · {kept} surviving ·{' '}
-                {data.scoped.length - kept} rejected.{view !== 3 && ' Keep comparing; there is no fixed trial count.'}
+                {data.scoped.length - kept} rejected.{view !== 2 && ' Keep comparing; there is no fixed trial count.'}
               </p>
             </header>
             {error && (
@@ -303,17 +291,17 @@ export default function RankingModal({ isOpen, onClose, history, running = false
                 {error}
               </p>
             )}
-            {view !== 3 && <div className="studio-muted text-xs mb-4 flex items-center gap-4">
-              {view !== 3 && <span>Only Compare folder runs count. Manual generations are excluded.</span>}
+            {view !== 2 && <div className="studio-muted text-xs mb-4 flex items-center gap-4">
+              {view !== 2 && <span>Only Compare folder runs count. Manual generations are excluded.</span>}
               {encoderControl}
             </div>}
-            {view !== 3 && new Set(rows.map(r => r.total)).size > 1 && (
+            {view !== 2 && new Set(rows.map(r => r.total)).size > 1 && (
               <p className="studio-muted text-xs mb-5">
                 Unequal exposure: compare attempt counts. More trials can produce more survivors without a higher
                 survival rate.
               </p>
             )}
-            {view === 3 ? <RoundsView records={data.scoped} folder={folder} encoder={separateEncoders ? activeEncoder : null} disabled={loading || running} onDelete={deleteRounds} encoderControl={encoderControl}/> : !rows.length ? (
+            {view === 2 ? <RoundsView records={data.scoped} folder={folder} encoder={separateEncoders ? activeEncoder : null} disabled={loading || running} onDelete={deleteRounds} encoderControl={encoderControl}/> : !rows.length ? (
               <p className="studio-muted py-16 text-center">
                 {loading
                   ? 'Loading comparisons…'
@@ -544,90 +532,10 @@ export default function RankingModal({ isOpen, onClose, history, running = false
                     </div>
                   </>
                 )}
-                {view === 2 && (
-                  <>
-                    <div className="flex justify-between items-end mb-7">
-                      <div>
-                        <div className="studio-kicker">03 / The contact sheet</div>
-                        <h2>Show me what survived.</h2>
-                      </div>
-                      <label className="text-xs studio-muted w-[480px] min-w-0 shrink-0">
-                        Filter evidence by prompt
-                        <select
-                          aria-label="Evidence prompt"
-                          value={prompt}
-                          onChange={e => {
-                            setPrompt(e.target.value);
-                            setVisibleImages(12);
-                          }}
-                          className="studio-select block mt-2 max-w-[480px]"
-                        >
-                          <option value="">All prompts</option>
-                          {prompts.map(p => (
-                            <option key={p} value={p}>
-                              {p}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                    <div className="grid grid-cols-[minmax(0,1fr)_320px] gap-9">
-                      <section>
-                        <div className="grid grid-cols-3 gap-5">
-                          {shownEvidence.slice(0, visibleImages).map(r => (
-                            <a
-                              key={r.path}
-                              className="studio-print"
-                              href={`/api/files/${encodeFilePathForUrl(r.path)}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              title="Open full image"
-                            >
-                              <img
-                                loading="lazy"
-                                src={`/api/files/${encodeFilePathForUrl(r.path)}`}
-                                alt={r.generation?.sample?.prompt || 'Surviving generated image'}
-                                className="w-full aspect-[3/4] object-contain"
-                              />
-                              <div className="text-sm pt-3">{selected && label(selected)}</div>
-                              <p className="text-[11px] mt-2 line-clamp-3" title={r.generation?.sample?.prompt}>
-                                {r.generation?.sample?.prompt}
-                              </p>
-                              <p className="text-[10px] mt-2">
-                                Seed {r.generation?.sample?.seed ?? 'unknown'} ·{' '}
-                                {r.round ? 'Tracked round' : 'Imported history'}
-                              </p>
-                            </a>
-                          ))}
-                        </div>
-                        {!shownEvidence.length && (
-                          <p className="studio-muted py-10">No surviving images for this selection.</p>
-                        )}
-                        {shownEvidence.length > visibleImages && (
-                          <button className="studio-pill mt-6" onClick={() => setVisibleImages(n => n + 12)}>
-                            Show more ({shownEvidence.length - visibleImages} remaining)
-                          </button>
-                        )}
-                      </section>
-                      <aside className="border-l border-[var(--line)] pl-7">
-                        <div className="studio-kicker">Pinned for inspection</div>
-                        <h2 className="mt-3 break-words">{selected && shortCheckpoint(selected.path)}</h2>
-                        <div className="text-5xl font-serif my-4">
-                          {selected?.strength}
-                          <small className="text-sm studio-muted ml-2">strength</small>
-                        </div>
-                        <p className="studio-muted text-sm mb-6">
-                          {selected?.kept} survivors in {selected?.total} attempts. Prompt filtering changes the images
-                          shown, not the overall ranking.
-                        </p>
-                        <Leaderboard />
-                      </aside>
-                    </div>
-                  </>
-                )}
+                
               </>
             )}
-            <p hidden={view === 3} className="studio-muted text-xs mt-8 border-t border-[var(--line)] pt-4">
+            <p hidden={view === 2} className="studio-muted text-xs mt-8 border-t border-[var(--line)] pt-4">
               Ties stay tied, including the top three. Baselines are included in summary counts but do not compete;
               supporting LoRAs do not compete. Unattributed legacy stacks are excluded. Images still present are votes—not objective quality scores.
               Close, cull, compare and reopen to update.
@@ -639,7 +547,7 @@ export default function RankingModal({ isOpen, onClose, history, running = false
               <button onClick={() => cycle(-1)} aria-label="Previous visualisation">
                 <ArrowLeft size={18} />
               </button>
-              {[Grid2X2, LineChart, Images, List].map((Icon, i) => (
+              {[Grid2X2, LineChart, List].map((Icon, i) => (
                 <button
                   key={views[i]}
                   onClick={() => setView(i)}
